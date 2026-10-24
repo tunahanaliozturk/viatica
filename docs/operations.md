@@ -158,8 +158,48 @@ To be written with Search (M4).
 
 ### Outbox backlog
 
-To be written with the Kernel messaging outbox and relay.
+**Shows up as** `viatica.outbox.age` (seconds, tagged `outbox` with the DbContext name) above 30, the limit
+`docs/design.md` sets after a quiet run. Logs carry `Producing outbox row ... failed on attempt N` (warning) or
+`Outbox relay round for ... failed` (error).
+
+**Confirm** in the service's database:
+
+```sql
+select partition_key, count(*), min(occurred_at), max(attempts), max(last_error)
+from <schema>.outbox_messages group by partition_key order by min(occurred_at) limit 20;
+```
+
+- Many keys, `attempts` 0: the relay is not running or not keeping up. Check the service is up and its log for
+  relay round errors (database or broker unreachable). More replicas drain faster; each owns different keys.
+- Many keys, `attempts` above 0, the same `last_error`: Kafka is down or rejecting the producer. Fix the broker;
+  rows retry with backoff up to a minute and drain on their own.
+- One key, `attempts` climbing: that row can never be produced (too large, say), and the rows behind it on the
+  same key wait on purpose. Copy the row out for the owning team, then delete it:
+  `delete from <schema>.outbox_messages where id = '<id>';`. Its consumers never see that event, so treat it like
+  a dead letter: whoever owns the aggregate decides whether to repair state by hand.
+
+**Never** delete rows in bulk or truncate the table to "unstick" it: each row is an effect another service is
+waiting for.
 
 ### Dead letter queue growth
 
-To be written with the Kernel messaging inbox and DLQ handling.
+**Shows up as** messages on any `<topic>.dlq`, `viatica.messaging.consumed{outcome="dead_lettered"}` above zero,
+and the error log line `Message at <topic>/<partition>@<offset> sent to <topic>.dlq: <exception type>`. Outside a
+chaos test that expects one, any dead letter is an incident.
+
+**Confirm** what was parked and why. The value is the original envelope, untouched; the reason is in headers:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092   --topic booking.v1.dlq --from-beginning --property print.headers=true --property print.key=true
+```
+
+- `dlq-attempts: 0` and a `System.Text.Json` error type: the message could not be read (malformed JSON, or an
+  envelope `version` this consumer does not know). A producer is ahead of the consumer or broken; fix the code.
+- `dlq-attempts` equal to the subscription's `MaxAttempts`: the handler threw every time. The service log has
+  each attempt with its exception, by event id (`Handler for <type> <id> failed on attempt ...`).
+
+**Recover.** Fix the cause, then put the message back on its original topic with its key and value unchanged.
+The consumer's inbox makes a replay of something already applied a no-op, so replaying is safe. Remember the
+events behind it on the same key were applied without it: the handler must cope with arriving late, and the
+reconciliation in `docs/design.md` says whether state needs repair. There is no replay tool yet
+(`docs/messaging.md`, "What it does not guarantee").
