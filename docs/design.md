@@ -14,7 +14,7 @@ bug: fix it in a PR that edits this file first.
 | Search | `Viatica.Search.*` | 8104 | OpenSearch | none | `stays.v1`, `cars.v1` (listing and availability) |
 | Booking | `Viatica.Booking.*` | 8105 | Postgres `booking` | `booking.v1` | `stays.v1`, `cars.v1`, `flights.v1`, `payments.v1` (hold, order, payment outcomes) |
 | Payments | `Viatica.Payments.*` | 8106 | Postgres `payments` | `payments.v1` | `booking.v1` (payment requests) |
-| Gateway | `Viatica.Gateway` | 8080 | none | none | none |
+| Gateway | `Viatica.Gateway` | 8000 | none | none | none |
 | airline-sim | `Viatica.AirlineSim` | 8201 | Postgres `airlinesim` | none | none |
 | psp-sim | `Viatica.PspSim` | 8202 | in memory | none | none |
 | Web | `web/` | 5173 | none | none | none |
