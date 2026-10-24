@@ -55,12 +55,35 @@ internal sealed class AppliedEvent
 }
 
 /// <summary>Applies <see cref="ThingHappened"/> by writing a row; the consumer commits it with the inbox row.</summary>
-internal sealed class RecordingHandler(TestDb db) : IIntegrationEventHandler<ThingHappened>
+internal sealed class RecordingHandler(TestDb db, HandlerGate gate) : IIntegrationEventHandler<ThingHappened>
 {
-    public Task HandleAsync(ThingHappened message, CancellationToken cancellationToken)
+    public async Task HandleAsync(ThingHappened message, CancellationToken cancellationToken)
     {
+        await gate.PassAsync(message.Key, cancellationToken);
         db.Applied.Add(new AppliedEvent { Key = message.Key, Sequence = message.Sequence, TraceId = Activity.Current?.TraceId.ToString() });
-        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Holds the handler of one chosen key until the test lets it go; every other key passes straight through.</summary>
+internal sealed class HandlerGate
+{
+    private volatile string? _key;
+    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task Entered => _entered.Task;
+
+    public void HoldKey(string key) => _key = key;
+
+    public void Release() => _released.TrySetResult();
+
+    public async Task PassAsync(string key, CancellationToken cancellationToken)
+    {
+        if (key == _key)
+        {
+            _entered.TrySetResult();
+            await _released.Task.WaitAsync(cancellationToken);
+        }
     }
 }
 
@@ -90,9 +113,10 @@ internal static class TestService
         string topic,
         bool relay = true,
         string? consumerGroup = null,
-        Attempts? attempts = null)
+        Attempts? attempts = null,
+        HandlerGate? gate = null)
     {
-        IHost host = Build(connectionString, kafka, topic, relay, consumerGroup, attempts);
+        IHost host = Build(connectionString, kafka, topic, relay, consumerGroup, attempts, gate);
         await host.StartAsync();
         return host;
     }
@@ -103,11 +127,13 @@ internal static class TestService
         string topic,
         bool relay = true,
         string? consumerGroup = null,
-        Attempts? attempts = null)
+        Attempts? attempts = null,
+        HandlerGate? gate = null)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(attempts ?? new Attempts());
+        builder.Services.AddSingleton(gate ?? new HandlerGate());
         // Pooled, as the services run it: AddIntegrationEvent must find the event types without a constructor argument.
         builder.Services.AddDbContextPool<TestDb>(options => options.UseNpgsql(connectionString));
         builder.Services.AddMessaging(Types, options => options.BootstrapServers = kafka.BootstrapServers);

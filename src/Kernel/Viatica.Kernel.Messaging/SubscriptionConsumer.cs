@@ -63,6 +63,7 @@ public sealed class SubscriptionConsumer<TDbContext> : BackgroundService
     private async Task RunAsync(CancellationToken stoppingToken)
     {
         using IConsumer<string, byte[]> consumer = CreateConsumer();
+        ConsumerCreated?.Invoke(consumer);
         consumer.Subscribe(_options.Topic);
         _logger.SubscriptionStarted(_options.ConsumerGroup, _options.Topic);
 
@@ -107,6 +108,9 @@ public sealed class SubscriptionConsumer<TDbContext> : BackgroundService
             consumer.Close();
         }
     }
+
+    /// <summary>Hands a test the Kafka client the loop reads from, so it can take a partition away mid-handler.</summary>
+    internal Action<IConsumer<string, byte[]>>? ConsumerCreated { get; set; }
 
     /// <summary>
     /// Auto commit stays on, but it commits only offsets stored by <see cref="RunAsync"/> after a final outcome,
