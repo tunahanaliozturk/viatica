@@ -1,0 +1,89 @@
+### Flights service (port 8103)
+# Start the stack first:  docker compose up -d --wait flights
+# Works in VS Code (REST Client) and in JetBrains IDEs. Requests that depend on an earlier one use its response.
+
+@host = http://localhost:8103
+@apiVersion = 2026-11-01
+
+### 1. Is it ready? Needs no api-version. Ready means Postgres and Valkey answer.
+GET {{host}}/health/ready
+
+### 2. Search IST to LHR for one adult, three weeks out. This asks all four airlines at once and answers within 2.5 seconds.
+# Molasses Airways (YZ) is slow on purpose; if it misses the deadline it is named in incompleteSuppliers and the rest
+# are returned. The first page comes back with the search id, when the search expires, and a nextLink.
+# @name search
+POST {{host}}/flights/searches?api-version={{apiVersion}}
+Content-Type: application/json
+
+{
+  "origin": "IST",
+  "destination": "LHR",
+  "departureDate": "2026-12-01",
+  "adults": 1,
+  "children": 0,
+  "infants": 0,
+  "cabin": "Economy"
+}
+
+### 3. A return trip for a family: two adults, a child and an infant. Each offer prices both legs.
+POST {{host}}/flights/searches?api-version={{apiVersion}}
+Content-Type: application/json
+
+{
+  "origin": "AMS",
+  "destination": "BCN",
+  "departureDate": "2026-12-01",
+  "returnDate": "2026-12-08",
+  "adults": 2,
+  "children": 1,
+  "infants": 1
+}
+
+### 4. A search that is wrong in several ways at once: one 400 with a detail per field.
+POST {{host}}/flights/searches?api-version={{apiVersion}}
+Content-Type: application/json
+
+{ "origin": "ist", "destination": "IST", "departureDate": "2020-01-01", "adults": 1, "infants": 2 }
+
+### 5. Read the search again, three offers at a time. This reads Valkey and never calls an airline.
+@searchId = {{search.response.body.$.searchId}}
+GET {{host}}/flights/searches/{{searchId}}?$top=3&api-version={{apiVersion}}
+
+### 6. Filter and order the cached set. Fields: id, airline, fareClass, cabin, refundable, totalAmount, departure, duration.
+GET {{host}}/flights/searches/{{searchId}}?$filter=airline eq 'ZC' and totalAmount le 300.00&$orderby=departure desc&api-version={{apiVersion}}
+
+### 7. Follow a nextLink exactly as returned. It carries a signed skiptoken, so it only works for this search and query.
+# Copy a nextLink from the response of request 2 or 5 here.
+GET {{host}}/flights/searches/{{searchId}}?api-version={{apiVersion}}&$skiptoken=PASTE-FROM-NEXTLINK
+
+### 8. Re-price the cheapest offer before it goes into a trip. The answer is Unchanged or PriceChanged, always with a
+# fresh offer (new id, new expiry). A changed price comes with previousTotal and is never applied silently.
+# An offer that is gone answers 409 OfferExpired; an airline that cannot be asked answers 503 SupplierUnavailable.
+@offerId = {{search.response.body.$.value[0].id}}
+POST {{host}}/flights/offers/{{offerId}}/price?api-version={{apiVersion}}
+
+### 9. Make an airline misbehave, then search again (the simulator's admin API, port 8201, no authentication).
+# Outage on one airline and a slow one: the search still answers in 2.5 s and names both.
+PATCH http://localhost:8201/admin/airlines/JG/knobs
+Content-Type: application/json
+
+{ "Outage": true }
+
+###
+PATCH http://localhost:8201/admin/airlines/YZ/knobs
+Content-Type: application/json
+
+{ "LatencyMedianMs": 10000, "LatencySigma": 0 }
+
+### Put every airline back.
+POST http://localhost:8201/admin/knobs/reset
+
+### 10. Read an order (admin only). Orders are created by Booking over Kafka (FlightOrderRequested), not over HTTP.
+# Get a token for an admin user from Keycloak (docs/operations.md lists the users), then:
+@token = PASTE-AN-ACCESS-TOKEN
+@orderId = PASTE-AN-ORDER-ID
+GET {{host}}/flights/orders/{{orderId}}?api-version={{apiVersion}}
+Authorization: Bearer {{token}}
+
+### 11. The OpenAPI document, no api-version needed.
+GET {{host}}/openapi/v1.json
