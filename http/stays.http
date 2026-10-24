@@ -1,0 +1,137 @@
+# Stays, in the order a reader would try it. Start the stack (docker compose up -d --wait) and open this file in
+# VS Code with the REST Client extension, or in a JetBrains IDE. Every request carries api-version.
+#
+# The people are in the Keycloak realm: partner-stays1 owns properties, traveller1 and admin1 are what they sound
+# like. Their password is "viatica". A second partner for the cross-tenant requests is partner-cars1, whose token
+# also carries a partnerId (its audience is the same, so Stays accepts it and answers 404 for what is not theirs).
+
+@stays = http://localhost:8101
+@keycloak = http://localhost:8080/realms/viatica/protocol/openid-connect/token
+@v = api-version=2026-11-01
+
+# Ids are chosen by the client, so every creation below can be sent twice. Change them for a fresh property.
+@propertyId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9e01
+@roomTypeId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9e02
+
+### 1. Sign in as the partner. Later requests read the token from here.
+# @name partnerLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=partner-stays1&password=viatica
+
+@partnerToken = {{partnerLogin.response.body.access_token}}
+
+### 2. Create a property. PUT with your own id: sending it again returns the same property (200 instead of 201).
+# It starts as a Draft and only you and an admin can see it. The ETag in the answer is what later updates need.
+PUT {{stays}}/properties/{{propertyId}}?{{v}}
+Authorization: Bearer {{partnerToken}}
+Content-Type: application/json
+
+{
+  "name": "Casa do Mar",
+  "description": "Twelve rooms above the harbour in Alfama.",
+  "address": { "line1": "Rua das Flores 12", "city": "Lisbon", "region": "Lisboa", "postalCode": "1200-195", "countryCode": "PT" },
+  "location": { "latitude": 38.7139, "longitude": -9.1334 },
+  "starRating": 4,
+  "amenities": ["wifi", "breakfast", "rooftop pool"],
+  "checkInFrom": "15:00:00",
+  "checkOutUntil": "11:00:00",
+  "cancellationPolicy": { "freeUntilHoursBeforeStart": 48, "penaltyAfter": "FirstUnit" }
+}
+
+### 3. Read it back (the ETag header is the current version).
+# @name property
+GET {{stays}}/properties/{{propertyId}}?{{v}}
+Authorization: Bearer {{partnerToken}}
+
+### 4. Change it. PATCH takes only the fields you want to change and needs If-Match with the ETag from step 3.
+# Without If-Match: 428. With an old ETag: 412. Copy the ETag here.
+PATCH {{stays}}/properties/{{propertyId}}?{{v}}
+Authorization: Bearer {{partnerToken}}
+Content-Type: application/json
+If-Match: "REPLACE-WITH-THE-ETAG"
+
+{ "description": "Twelve rooms above the harbour in Alfama, a minute from the tram." }
+
+### 5. Add a room type. Same rules: your own id, PUT to create, PATCH with If-Match to change.
+# baseRate is what a night costs when a calendar edit does not name a rate.
+PUT {{stays}}/properties/{{propertyId}}/room-types/{{roomTypeId}}?{{v}}
+Authorization: Bearer {{partnerToken}}
+Content-Type: application/json
+
+{
+  "name": "Double with balcony",
+  "maxOccupancy": 2,
+  "beds": "1 double",
+  "amenities": ["balcony", "air conditioning"],
+  "baseRate": { "amount": "120.00", "currency": "EUR" }
+}
+
+### 6. Put nights on sale: 8 rooms a night for all of December, 140 EUR. One request, one transaction, any range up to
+# a year ahead. Repeatability-Request-ID makes a retry safe: send this twice and the second answer is the first one.
+# Repeatability-First-Sent must be recent; the REST Client fills {{$datetime}} for you.
+POST {{stays}}/properties/{{propertyId}}/room-types/{{roomTypeId}}/inventory:set?{{v}}
+Authorization: Bearer {{partnerToken}}
+Content-Type: application/json
+Repeatability-Request-ID: 6f0c1d0e-2b7a-4c52-9d6e-0a1b2c3d4e5f
+Repeatability-First-Sent: {{$datetime rfc1123}}
+
+{ "from": "2026-12-01", "to": "2026-12-31", "allotment": 8, "rate": { "amount": "140.00", "currency": "EUR" } }
+
+### 7. Look at the calendar: allotment, sold, held and rate per night.
+GET {{stays}}/properties/{{propertyId}}/room-types/{{roomTypeId}}/inventory?from=2026-12-01&to=2026-12-07&{{v}}
+Authorization: Bearer {{partnerToken}}
+
+### 8. Publish. Needs a room type, needs If-Match. This is when search learns about the property.
+POST {{stays}}/properties/{{propertyId}}/publish?{{v}}
+Authorization: Bearer {{partnerToken}}
+If-Match: "REPLACE-WITH-THE-ETAG"
+
+### 9. Anyone can now read it, no token. A draft would be a 404.
+GET {{stays}}/properties/{{propertyId}}?{{v}}
+
+### 10. The public list: published properties only, 20 a page, nextLink to follow. $filter and $orderby are allowlisted.
+GET {{stays}}/properties?$filter=starRating ge 4&$orderby=name&$top=20&{{v}}
+
+### 11. The partner's own list, drafts included.
+GET {{stays}}/partner/properties?{{v}}
+Authorization: Bearer {{partnerToken}}
+
+### 12. A quote, no sign in needed: the nightly breakdown, the total, and a token that pins the price for 15 minutes.
+# Booking hands the token back when it asks for a hold. The token is readable (it is base64url JSON before the dot) but
+# only Stays can mint one.
+# @name quote
+POST {{stays}}/properties/{{propertyId}}/room-types/{{roomTypeId}}/quotes?{{v}}
+Content-Type: application/json
+
+{ "checkIn": "2026-12-01", "checkOut": "2026-12-04", "quantity": 1, "guests": 2 }
+
+### 13. What a stay refused looks like: 31 nights is StayTooLong, 3 guests in a double is OccupancyExceeded.
+POST {{stays}}/properties/{{propertyId}}/room-types/{{roomTypeId}}/quotes?{{v}}
+Content-Type: application/json
+
+{ "checkIn": "2026-12-01", "checkOut": "2027-01-01", "quantity": 1, "guests": 3 }
+
+### 14. Take it off sale. The partner may, and so may an admin.
+POST {{stays}}/properties/{{propertyId}}/unpublish?{{v}}
+Authorization: Bearer {{partnerToken}}
+If-Match: "REPLACE-WITH-THE-ETAG"
+
+### 15. Another partner's token on this property answers 404, never 403, so ids do not leak.
+# @name otherLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=partner-cars1&password=viatica
+
+###
+PATCH {{stays}}/properties/{{propertyId}}?{{v}}
+Authorization: Bearer {{otherLogin.response.body.access_token}}
+Content-Type: application/json
+If-Match: *
+
+{ "name": "Mine now" }
+
+### Holds are not an HTTP endpoint. Booking asks for them with StayHoldRequested on booking.v1, and Stays answers on
+# stays.v1; see docs/services/stays.md for the conversation.
