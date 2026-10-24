@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The measurements behind ADR 0004: can OrionGuard.EntityFrameworkCore's outbox be ours, and what does our own
+    relay do on the same machine. Run by hand: dotnet run -c Release, project benchmarks/Viatica.OutboxSpike.
+    Not an .IntegrationTests project on purpose: throughput on a shared CI runner is noise, and the claims CI must
+    keep (order, no duplicates, DLQ) are tested in Viatica.Kernel.Messaging.IntegrationTests.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="OrionGuard.EntityFrameworkCore" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tests\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>
