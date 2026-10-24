@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The DbContext and its migrations, the Kafka wiring, and the expiry sweeper. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Stays.Application\Viatica.Stays.Application.csproj" />
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Stays.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
