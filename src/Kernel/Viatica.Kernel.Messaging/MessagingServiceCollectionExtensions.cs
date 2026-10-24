@@ -55,6 +55,8 @@ public static class MessagingServiceCollectionExtensions
         var options = new OutboxRelayOptions { Topic = topic };
         configure?.Invoke(options);
 
+        OutboxKeyLocks.AddTo<TDbContext>(services);
+
         // Registered by factory, not AddHostedService: that deduplicates by implementation type, and the type alone
         // does not say which options it runs with.
         services.AddSingleton<IHostedService>(sp => ActivatorUtilities.CreateInstance<OutboxRelay<TDbContext>>(sp, options));
@@ -78,6 +80,8 @@ public static class MessagingServiceCollectionExtensions
 
         var options = new SubscriptionOptions { Topic = topic, ConsumerGroup = consumerGroup };
         configure?.Invoke(options);
+
+        OutboxKeyLocks.AddTo<TDbContext>(services);
 
         var builder = new SubscriptionBuilder(services);
         services.AddSingleton<IHostedService>(sp => new SubscriptionConsumer<TDbContext>(options, builder.Handlers, sp));

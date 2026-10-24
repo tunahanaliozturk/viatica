@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Outbox: events of one key could reach Kafka out of order when two transactions overlapped. Writers now take a
+  transaction scoped advisory lock per key before inserting (ADR 0007, #42).
+
 ### Added
 
 - `compose.yaml` with the local infrastructure: PostgreSQL 18 with one database and one least-privilege role per
