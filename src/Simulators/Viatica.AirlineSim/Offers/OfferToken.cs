@@ -24,10 +24,13 @@ internal sealed record OfferToken(
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
+    [JsonIgnore]
     public PassengerMix Mix => new(Passengers[0], Passengers[1], Passengers[2]);
 
+    [JsonIgnore]
     public Price Price => new(Base, Taxes);
 
+    [JsonIgnore]
     public DateTimeOffset Expiry => DateTimeOffset.FromUnixTimeSeconds(ExpiresAt);
 
     public static OfferToken Create(string airline, FareClass fareClass, PassengerMix mix, IEnumerable<Leg> legs, Price price, DateTimeOffset now) =>

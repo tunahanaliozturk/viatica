@@ -31,6 +31,19 @@ public sealed class OfferAndPassengerTests
         decoded.ResolveLegs(Network).ShouldBe(legs);
     }
 
+    [Fact]
+    public void An_offer_id_carries_only_the_fields_it_needs()
+    {
+        Leg leg = new(Network.Between("ZC", "IST", "LHR")[0], TravelDate);
+        OfferToken token = OfferToken.Create("ZC", FareClass.Find('K')!, new PassengerMix(1, 0, 0), [leg], new Price(216m, 42.88m), DateTimeOffset.UnixEpoch);
+
+        string json = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(token.Encode()));
+
+        json.ShouldNotContain("Mix");
+        json.ShouldNotContain("Expiry");
+        token.Encode().Length.ShouldBeLessThan(140);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("not-an-offer")]
