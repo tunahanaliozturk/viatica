@@ -63,6 +63,7 @@ public static class MessagingModel
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(@event);
 
+        OutboxKeyLocks.EnsureOn(db);
         db.Set<OutboxMessage>().Add(OutboxMessage.For(@event, db.GetService<IntegrationEventTypes>()));
     }
 }

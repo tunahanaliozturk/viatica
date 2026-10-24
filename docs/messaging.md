@@ -49,6 +49,10 @@ changes state through `I<Service>Db`, and does not save: the consumer saves its 
 transaction. Throw to retry. An event for a state the aggregate has already left is not an error; the handler
 records why and returns.
 
+A host that queues events must register `AddOutboxRelay` or `AddSubscription` for that context, even when the relay
+runs elsewhere: they add the interceptor that takes the per key lock, and `AddIntegrationEvent` throws without it.
+Do not hold a transaction open across a slow call after queuing an event; other writers of the same key wait for it.
+
 **Tracing and metrics:** add `MessagingTelemetry.Name` (`Viatica.Messaging`) to the host's OpenTelemetry tracing
 and metrics.
 
@@ -60,7 +64,7 @@ on first use, so a typo fails instead of inventing a topic.
 | Guarantee | How | Test |
 |---|---|---|
 | An event is published if and only if its state change committed | Outbox row in the same transaction | `An_event_saved_with_the_state_change_reaches_kafka_in_the_envelope_and_is_applied_once` |
-| Events with the same `PartitionKey` reach Kafka, and are applied, in the order they were saved, with any number of relay instances | Identity column order; a relay owns a key by locking its oldest row with `FOR UPDATE SKIP LOCKED`; a key stops at its first failed row | `Per_key_order_holds_through_two_relays_and_a_consumer` |
+| Events with the same `PartitionKey` reach Kafka, and are applied, in the order they were saved, with any number of relay instances | Identity column order; writers of one key take a transaction scoped advisory lock before inserting, so sequence order is commit order (ADR 0007); a relay owns a key by locking its oldest row with `FOR UPDATE SKIP LOCKED`; a key stops at its first failed row | `Per_key_order_holds_through_two_relays_and_a_consumer`, `A_later_event_of_a_key_is_not_published_before_an_earlier_one_whose_transaction_is_still_open` |
 | An event is applied once per consumer group, even when Kafka delivers it again | Inbox row keyed by (consumer group, event id) in the handler's transaction; offset stored only after that commits | `A_consumer_killed_between_handling_and_offset_commit_does_not_apply_the_event_twice` |
 | A failing message holds its partition for a bounded time | `MaxAttempts` (default 5) with exponential backoff, then `<topic>.dlq` with the error in headers | `A_poison_message_goes_to_the_dlq_after_the_configured_attempts_and_its_partition_moves_on` |
 | An unreadable message never reaches a handler | Parked on the DLQ at once, `dlq-attempts: 0` | `A_message_that_cannot_be_read_goes_to_the_dlq_without_retries` |

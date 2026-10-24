@@ -1,6 +1,6 @@
 # 0004: Our own outbox, not OrionGuard.EntityFrameworkCore's
 
-Status: accepted, 2026-10-24
+Status: accepted, 2026-10-24. The ordering claim below needed a writer side lock; see ADR 0007.
 
 ## Context
 
