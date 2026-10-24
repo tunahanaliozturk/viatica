@@ -55,6 +55,22 @@ public sealed class CatalogueTests(StaysFixture stays) : IClassFixture<StaysFixt
     }
 
     [Fact]
+    public async Task Creations_racing_for_one_id_make_one_property_and_never_a_500()
+    {
+        Guid id = Guid.CreateVersion7();
+        string token = StaysHost.PartnerToken(Guid.CreateVersion7());
+
+        HttpResponseMessage[] responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            Host.SendAsync(HttpMethod.Put, $"/properties/{id}", Scenario.PropertyBody(), token)));
+
+        // The one that wins is 201. The rest either arrive after it and are told it exists (200), or collide with it
+        // in the database and are told to read and retry (409, from the unique violation on the primary key).
+        responses.Count(static r => r.StatusCode == HttpStatusCode.Created).ShouldBe(1);
+        responses.ShouldAllBe(static r => r.StatusCode == HttpStatusCode.Created || r.StatusCode == HttpStatusCode.OK || r.StatusCode == HttpStatusCode.Conflict);
+        (await Host.GetAsync($"/properties/{id}", token)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task An_invalid_body_is_one_400_that_names_every_field()
     {
         Guid id = Guid.CreateVersion7();

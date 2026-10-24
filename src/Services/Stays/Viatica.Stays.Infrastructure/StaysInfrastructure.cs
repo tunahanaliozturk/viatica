@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -31,9 +32,11 @@ public static class StaysInfrastructure
         TimeSpan sweepInterval = configuration.GetValue("Stays:HoldSweepInterval", TimeSpan.FromSeconds(5));
         const int sweepBatch = 100;
 
-        services.AddDbContextPool<StaysDbContext>(options => options.UseNpgsql(
-            connectionString,
-            npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", StaysDbContext.Schema)));
+        services.AddDbContextPool<StaysDbContext>(options => options
+            .UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", StaysDbContext.Schema))
+            // Two requests creating one id is an expected end of a race, answered 409 by the API. EF Core would log
+            // each at Error; a failure nobody handles still surfaces as an unhandled exception in the request log.
+            .ConfigureWarnings(static warnings => warnings.Log((CoreEventId.SaveChangesFailed, LogLevel.Debug))));
 
         // The consumer saves the DbContext it resolves, and the handlers must change that same instance, or their
         // changes would miss the inbox transaction. A scoped forward gives both the one instance of the scope.
