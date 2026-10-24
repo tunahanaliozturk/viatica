@@ -39,11 +39,41 @@ public sealed class ValkeyRepeatabilityStore(IConnectionMultiplexer valkey) : IR
         throw new InvalidOperationException($"Could not claim or read repeatability key '{key}'.");
     }
 
+    // The owner check and the write are one script, so they are one step on the server: a GET followed by a SET
+    // would let a newer claim arrive in between and be overwritten.
+    private const string CompleteScript = """
+        local current = redis.call('GET', KEYS[1])
+        if current and ARGV[1] ~= '' and cjson.decode(current).owner ~= ARGV[1] then return 0 end
+        redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+        return 1
+        """;
+
+    private const string ReleaseScript = """
+        local current = redis.call('GET', KEYS[1])
+        if current and cjson.decode(current).owner == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+        return 0
+        """;
+
+    private const string RenewScript = """
+        local current = redis.call('GET', KEYS[1])
+        if current and cjson.decode(current).owner == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+        return 0
+        """;
+
     public async ValueTask CompleteAsync(string key, RepeatableResponse response, TimeSpan timeToLive, CancellationToken cancellationToken) =>
-        await valkey.GetDatabase().StringSetAsync(key, Serialize(response), timeToLive, When.Always);
+        await valkey.GetDatabase().ScriptEvaluateAsync(
+            CompleteScript,
+            [key],
+            [response.Owner ?? string.Empty, Serialize(response), (long)timeToLive.TotalMilliseconds]);
 
     public async ValueTask ReleaseAsync(string key, CancellationToken cancellationToken) =>
         await valkey.GetDatabase().KeyDeleteAsync(key);
+
+    public async ValueTask ReleaseAsync(string key, string owner, CancellationToken cancellationToken) =>
+        await valkey.GetDatabase().ScriptEvaluateAsync(ReleaseScript, [key], [owner]);
+
+    public async ValueTask<bool> RenewAsync(string key, string owner, TimeSpan timeToLive, CancellationToken cancellationToken) =>
+        (long)await valkey.GetDatabase().ScriptEvaluateAsync(RenewScript, [key], [owner, (long)timeToLive.TotalMilliseconds]) == 1;
 
     private static byte[] Serialize(RepeatableResponse response) =>
         JsonSerializer.SerializeToUtf8Bytes(response, KernelJsonContext.Default.RepeatableResponse);

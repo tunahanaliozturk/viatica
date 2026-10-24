@@ -93,4 +93,35 @@ public sealed class ValkeyRepeatabilityStoreTests(ValkeyFixture fixture) : IClas
 
         (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp"), Minute, CancellationToken.None)).ShouldBeNull();
     }
+
+    [Fact]
+    public async Task A_request_that_lost_its_claim_cannot_complete_or_release_the_next_one()
+    {
+        string key = NewKey();
+        var done = new RepeatableResponse("fp", true, 201, null, null, "{}"u8.ToArray(), "first");
+        (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp", "first"), TimeSpan.FromMilliseconds(300), CancellationToken.None)).ShouldBeNull();
+        await Task.Delay(TimeSpan.FromMilliseconds(600));
+        (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp", "second"), Minute, CancellationToken.None)).ShouldBeNull();
+
+        await Store.CompleteAsync(key, done, Minute, CancellationToken.None);
+        await Store.ReleaseAsync(key, "first", CancellationToken.None);
+
+        RepeatableResponse held = (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp", "third"), Minute, CancellationToken.None))!;
+        held.Completed.ShouldBeFalse();
+        held.Owner.ShouldBe("second");
+    }
+
+    [Fact]
+    public async Task Only_the_owner_can_renew_its_claim()
+    {
+        string key = NewKey();
+        (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp", "first"), TimeSpan.FromMilliseconds(500), CancellationToken.None)).ShouldBeNull();
+
+        (await Store.RenewAsync(key, "someone-else", Minute, CancellationToken.None)).ShouldBeFalse();
+        (await Store.RenewAsync(key, "first", Minute, CancellationToken.None)).ShouldBeTrue();
+        await Task.Delay(TimeSpan.FromMilliseconds(900));
+
+        (await Store.TryClaimAsync(key, RepeatableResponse.Claim("fp", "second"), Minute, CancellationToken.None)).ShouldNotBeNull();
+        (await Store.RenewAsync(NewKey(), "first", Minute, CancellationToken.None)).ShouldBeFalse();
+    }
 }
