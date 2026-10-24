@@ -17,3 +17,13 @@ All notable changes to this project are documented here. The format follows
   the topics, and decodes real Keycloak tokens for their audiences and the `partnerId` claim.
 - `docs/operations.md` with the local stack, how to reset it, and its known limitations.
 - `CONTRIBUTING.md`, `SECURITY.md`, and Dependabot for NuGet, GitHub Actions, Docker and npm.
+- Flights service (`src/Services/Flights`, port 8103): flight search that asks four airlines at once under a 2.5 s
+  deadline and names the ones it left out, a circuit breaker per airline, offers cached in Valkey and paged with the
+  Kernel's keyset paging, re-price that shows a changed price instead of applying it, and orders, ticketing, void
+  and cancel driven by the saga's events. A timed out order creation is looked up by idempotency key before it is
+  accepted or rejected. Passenger data is sealed on the broker and at rest and never logged
+  (`docs/services/flights.md`, `http/flights.http`).
+- `Viatica.Kernel.Pii`: AES-256-GCM sealing with associated data, and the passenger list format Booking and
+  Flights share. `Viatica.Testing` gains a Valkey fixture.
+- `airline-sim` and its migrate step in `compose.yaml` (port 8201), and `flights` with its own.
+- `FlightRejectionReason.InvalidPassengers` in `Viatica.Contracts`.

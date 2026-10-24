@@ -102,6 +102,28 @@ grep -q '"partnerId":"c0000000-0000-4000-8000-000000000001"' <<< "$partner" \
   || fail "keycloak: partner-stays1's token lacks its partnerId claim"
 ok "keycloak: partner-stays1's token carries its partnerId"
 
+# Airline simulator and Flights -----------------------------------------------------------------------------------
+
+curl -fsS http://localhost:8201/health/ready > /dev/null || fail "airline-sim: /health/ready did not answer 200 on 8201"
+ok "airline-sim: ready on 8201"
+
+curl -fsS http://localhost:8103/health/ready > /dev/null || fail "flights: /health/ready did not answer 200 on 8103"
+ok "flights: ready on 8103 (database and Valkey reachable)"
+
+# A search through the whole path: Flights asks the four airlines, caches the offers in Valkey and answers. It does
+# not insist on every airline, because Molasses Airways is slow by design and may miss the 2.5 s deadline; it does
+# insist on the fast one, and on the cached search being readable again without a second round of airline calls.
+departure=$(date -u -d '+14 days' +%F)
+search=$(curl -fsS -X POST "http://localhost:8103/flights/searches?api-version=2026-11-01" \
+  -H 'Content-Type: application/json' \
+  -d "{\"origin\":\"IST\",\"destination\":\"LHR\",\"departureDate\":\"$departure\",\"adults\":1}") \
+  || fail "flights: a search on IST-LHR did not answer 201"
+grep -q '"airline":"ZC"' <<< "$search" || fail "flights: the search has no offer from the reliable airline: ${search:0:300}"
+search_id=$(sed -n 's/.*"searchId":"\([^"]*\)".*/\1/p' <<< "$search")
+curl -fsS "http://localhost:8103/flights/searches/$search_id?\$top=3&api-version=2026-11-01" | grep -q '"value"' \
+  || fail "flights: the cached search $search_id could not be read back"
+ok "flights: a search fans out to the airlines, is cached in Valkey and pages from the cache"
+
 # Aspire dashboard ------------------------------------------------------------------------------------------------
 
 # An empty OTLP export request is valid protobuf; a 2xx means the sink accepts traces.

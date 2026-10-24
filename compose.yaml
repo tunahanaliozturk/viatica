@@ -13,6 +13,29 @@
 
 name: viatica
 
+# Settings the Flights host and its migrate one-shot share. The migrate step builds the same host, so it needs the same
+# connection strings and keys even though it only touches the database. The passenger key is the one Booking will
+# hold too (docs/design.md, "Personal data on the broker"); both keys are public development values.
+x-flights-environment: &flights-environment
+  ConnectionStrings__Flights: Host=postgres;Port=5432;Database=flights;Username=flights;Password=flights
+  ConnectionStrings__Valkey: valkey:6379
+  Kafka__BootstrapServers: kafka:9092
+  Viatica__Api__SupportedApiVersions__0: "2026-11-01"
+  Viatica__Api__SkipTokenKey: dmlhdGljYS1kZXYtc2tpcHRva2VuLWtleS0wMDAwMDA=
+  Viatica__Pii__PassengerKey: dmlhdGljYS1kZXYtcGFzc2VuZ2VyLWtleS0wMDAwMDA=
+  Viatica__Pii__StorageKey: dmlhdGljYS1kZXYtZmxpZ2h0cy1zdG9yYWdlLWtleSE=
+  Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+  Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+  Flights__Suppliers__Airlines__0__Code: ZC
+  Flights__Suppliers__Airlines__0__BaseUrl: http://airline-sim:8080/ndc/ZC/
+  Flights__Suppliers__Airlines__1__Code: YZ
+  Flights__Suppliers__Airlines__1__BaseUrl: http://airline-sim:8080/ndc/YZ/
+  Flights__Suppliers__Airlines__2__Code: JG
+  Flights__Suppliers__Airlines__2__BaseUrl: http://airline-sim:8080/ndc/JG/
+  Flights__Suppliers__Airlines__3__Code: ZJ
+  Flights__Suppliers__Airlines__3__BaseUrl: http://airline-sim:8080/ndc/ZJ/
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+
 services:
   postgres:
     image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.6-alpine
@@ -174,6 +197,72 @@ services:
     # 18888 is the UI. 4317 (gRPC) and 4318 (HTTP) are the standard OTLP ports, so a service run from an IDE
     # exports with the OpenTelemetry defaults; containers use http://dashboard:18889.
     ports: ["18888:18888", "4317:18889", "4318:18890"]
+
+  # --- airline simulator (a test double, not part of the product) ------------------------------------------------------
+
+  # One-shot: creates the simulator's schema and exits 0. The simulator keeps its knobs in memory and its seats in
+  # Postgres; docs/airline-sim.md has the API and the switches.
+  airline-sim-migrate:
+    build:
+      context: .
+      dockerfile: src/Simulators/Viatica.AirlineSim/Dockerfile
+    image: viatica/airline-sim:dev
+    command: ["migrate"]
+    environment:
+      ConnectionStrings__AirlineSim: Host=postgres;Port=5432;Database=airlinesim;Username=airlinesim;Password=airlinesim
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  airline-sim:
+    image: viatica/airline-sim:dev
+    environment:
+      ConnectionStrings__AirlineSim: Host=postgres;Port=5432;Database=airlinesim;Username=airlinesim;Password=airlinesim
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+    # Its admin API is unauthenticated on purpose. Bound to localhost like everything else here; never expose it.
+    ports: ["8201:8080"]
+    depends_on:
+      airline-sim-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      # The aspnet image has bash but no curl or wget, so bash speaks HTTP to its own port.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+      start_interval: 2s
+
+  # --- Flights (M3) ------------------------------------------------------------------------------------------------
+
+  flights-migrate:
+    build:
+      context: .
+      dockerfile: src/Services/Flights/Viatica.Flights.Api/Dockerfile
+    image: viatica/flights:dev
+    command: ["migrate"]
+    environment: *flights-environment
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  flights:
+    image: viatica/flights:dev
+    environment: *flights-environment
+    ports: ["8103:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      flights-migrate: { condition: service_completed_successfully }
+      airline-sim: { condition: service_healthy }
+    healthcheck:
+      # The service asks its own port; the runtime image has no curl or wget (see Program.cs, "healthcheck").
+      test: ["CMD", "dotnet", "Viatica.Flights.Api.dll", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+      start_interval: 2s
 
 volumes:
   postgres:
