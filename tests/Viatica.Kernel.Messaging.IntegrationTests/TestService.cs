@@ -108,7 +108,8 @@ internal static class TestService
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(attempts ?? new Attempts());
-        builder.Services.AddDbContext<TestDb>(options => options.UseNpgsql(connectionString));
+        // Pooled, as the services run it: AddIntegrationEvent must find the event types without a constructor argument.
+        builder.Services.AddDbContextPool<TestDb>(options => options.UseNpgsql(connectionString));
         builder.Services.AddMessaging(Types, options => options.BootstrapServers = kafka.BootstrapServers);
 
         if (relay)

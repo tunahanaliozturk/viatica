@@ -11,22 +11,6 @@ using Viatica.Contracts;
 
 namespace Viatica.Kernel.Messaging;
 
-/// <summary>Applies one integration event to the service's state. Resolved per message, in its own scope.</summary>
-/// <remarks>
-/// Take the service's DbContext in the constructor and change it; do not commit. The consumer saves the changes
-/// together with the inbox row, in one transaction, after this returns. Throwing means "try again", up to the
-/// subscription's attempt limit, then the message goes to the dead letter topic.
-/// </remarks>
-[System.Diagnostics.CodeAnalysis.SuppressMessage(
-    "Naming",
-    "CA1711:Identifiers should not have incorrect suffix",
-    Justification = "It handles integration events; it is not a .NET event delegate, and the name is the one the design uses.")]
-public interface IIntegrationEventHandler<in TEvent>
-    where TEvent : IIntegrationEvent
-{
-    Task HandleAsync(TEvent message, CancellationToken cancellationToken);
-}
-
 /// <summary>Resolves the handler for one event type from a message scope and runs it.</summary>
 internal delegate Task HandleEvent(IServiceProvider services, IIntegrationEvent message, CancellationToken cancellationToken);
 
