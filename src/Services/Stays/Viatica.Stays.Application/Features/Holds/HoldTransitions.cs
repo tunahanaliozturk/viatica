@@ -16,14 +16,13 @@ namespace Viatica.Stays.Application.Features.Holds;
 public sealed class HoldTransitions(IStaysDb db, TimeProvider clock)
 {
     /// <summary>
-    /// Held to committed, while the hold is still live. A commit that arrives after the expiry is refused even if
-    /// the sweeper has not reached the hold yet, so the outcome does not depend on when the sweeper last ran.
+    /// Held to committed, for as long as the hold is held. The sweeper is the only authority on expiry: a commit
+    /// that reaches a hold past its <c>ExpiresAt</c> before the sweeper does still wins, because the rooms are still
+    /// reserved and refusing would only make Booking unwind a trip whose flights are already ticketed. Cars follows
+    /// the same rule, so the saga sees one behaviour from both.
     /// </summary>
-    public Task<Hold?> CommitAsync(Guid holdId, CancellationToken cancellationToken)
-    {
-        DateTimeOffset now = clock.GetUtcNow();
-        return MoveAsync(holdId, h => h.Id == holdId && h.Status == HoldStatus.Held && h.ExpiresAt > now, HoldStatus.Committed, now, cancellationToken);
-    }
+    public Task<Hold?> CommitAsync(Guid holdId, CancellationToken cancellationToken) =>
+        MoveAsync(holdId, h => h.Id == holdId && h.Status == HoldStatus.Held, HoldStatus.Committed, clock.GetUtcNow(), cancellationToken);
 
     public Task<Hold?> ReleaseAsync(Guid holdId, CancellationToken cancellationToken) =>
         MoveAsync(holdId, h => h.Id == holdId && h.Status == HoldStatus.Held, HoldStatus.Released, clock.GetUtcNow(), cancellationToken);

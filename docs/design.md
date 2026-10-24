@@ -124,6 +124,11 @@ Draft ──checkout──> Holding ──all held──> Authorizing ──auth
 | Stay, Car | `Pending -> Held -> Committed -> (Cancelled)`, or `Pending -> Rejected`, or `Held -> Released` / `Expired` |
 | Flight | `Pending -> Ordered -> Ticketed -> (Cancelled)`, or `Pending -> Rejected`, or `Ordered -> Voided`, `Ticketed -> Voided` (unwinding inside the void window) |
 
+A stay or car hold is committed whenever it is still `Held`, even past its `expiresAt`. Each service's expiry
+sweeper is the only authority on expiry; a compare-and-set on the hold's status decides whether the commit or the
+sweeper got there first. Until the sweeper runs the rooms or cars are still reserved, so a late commit oversells
+nothing, and refusing it would make Booking unwind a trip whose flights are already ticketed.
+
 ### Payments
 
 One payment per trip: authorise the sum of the authoritative item totals from the hold and order events, capture

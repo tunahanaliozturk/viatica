@@ -155,10 +155,11 @@ expires_at > @now` says who won in the row count, with no retry loop and no conc
 `Hold` carries no behaviour; the catalogue entities do. (`ManualExpiryTests.Of_many_sweepers_reaching_one_hold_exactly_one_expires_it`:
 twelve sweepers, one expiry, the rooms returned once.)
 
-**A commit after the expiry is refused even if the sweeper has not reached the hold.** Otherwise the outcome depends
-on when the sweeper last ran. Booking's deadline is two minutes inside the expiry, so this only happens when
-something went wrong, and then the saga has already been told `StayHoldExpired` or will be.
-(`ManualExpiryTests.A_commit_after_the_expiry_is_refused_even_before_the_sweeper_has_noticed`)
+**A hold is committed whenever it is still held, even past `ExpiresAt`.** The sweeper is the only authority on
+expiry, and the compare-and-set on the status decides who reached the hold first. The rooms are still reserved
+until the sweeper runs, so refusing a late commit would protect nobody and would make Booking unwind a trip whose
+flights are already ticketed. Booking's deadline is two minutes inside the expiry, so this edge only matters when
+messages are delayed. Cars follows the same rule. (`ExpiryTests.A_commit_past_the_expiry_wins_if_it_reaches_the_hold_before_the_sweeper`)
 
 **Commit sends no `StayAvailabilityChanged`.** The event's own comment says "after any rate edit, hold, commit, release
 or expiry", but moving a room from held to sold leaves the number available unchanged, and the projection would
