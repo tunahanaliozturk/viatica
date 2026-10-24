@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />
     <ProjectReference Include="..\..\src\Services\Flights\Viatica.Flights.Api\Viatica.Flights.Api.csproj" />
     <ProjectReference Include="..\..\src\Services\Stays\Viatica.Stays.Api\Viatica.Stays.Api.csproj" />
+    <ProjectReference Include="..\..\src\Services\Search\Viatica.Search.Api\Viatica.Search.Api.csproj" />
   </ItemGroup>
 
 </Project>

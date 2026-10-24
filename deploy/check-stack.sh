@@ -165,4 +165,13 @@ answer=$(curl -sS -X POST "http://localhost:8102/cars/quotes?api-version=2026-11
 grep -q '"code":"LocationNotFound"' <<< "$answer" || fail "cars: unexpected answer to a quote for an unknown location: $answer"
 ok "cars: quotes answer in the error envelope"
 
+# Search ----------------------------------------------------------------------------------------------------------
+
+# Ready means OpenSearch answers and both aliases exist, which is what search-migrate makes. The autocomplete call
+# needs no token and no index data: the airport list is compiled into the service.
+curl -fsS http://localhost:8104/health/ready > /dev/null || fail "search: /health/ready is not healthy"
+airports=$(curl -fsS "http://localhost:8104/autocomplete?q=lis&types=airport&api-version=2026-11-01")   || fail "search: autocomplete did not answer"
+grep -q '"code":"LIS"' <<< "$airports" || fail "search: autocomplete did not find the Lisbon airport"
+ok "search: ready, aliases in place, anonymous autocomplete answers"
+
 echo "stack ok"

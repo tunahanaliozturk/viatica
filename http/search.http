@@ -1,0 +1,54 @@
+# Search, in the order a reader would try it. Start the stack (docker compose up -d --wait) and open this file in
+# VS Code with the REST Client extension, or in a JetBrains IDE. Every request carries api-version.
+#
+# Search answers anonymously: no token, no sign in. It only knows what Stays and Cars have published, so an empty
+# stack answers every query with an empty list. Seed a property and a rental location first (http/stays.http and
+# http/cars.http, publish them), give the projection a second or so, then the requests below find them.
+
+@search = http://localhost:8104
+@v = api-version=2026-11-01
+
+# Dates are yyyy-MM-dd and must not be in the past; change them to something ahead of today.
+@checkIn = 2026-12-01
+@checkOut = 2026-12-04
+
+### 1. Is it up? Ready means OpenSearch answers and the stays and cars aliases exist. No api-version here.
+GET {{search}}/health/ready
+
+### 2. Autocomplete. Cities and properties come from what has been published; airports come from a list in the service.
+# types is optional (city, airport, property). A typed airport code comes first, then cities, other airports, properties.
+GET {{search}}/autocomplete?q=lis&{{v}}
+
+### 3. Stays by destination: free text over property name, city and region, accents and case ignored, small typos allowed.
+# The answer lists each property that has a room type free on every night, with its cheapest such room type, the
+# average price per night, and the total. nextLink is there when there is another page; follow it as it is.
+GET {{search}}/stays/search?destination=lisbon&checkIn={{checkIn}}&checkOut={{checkOut}}&guests=2&{{v}}
+
+### 4. Filters and a sort. stars and amenities are comma separated; prices are EUR per room and night.
+# sort is price (default), rating or distance. Distance needs a point: lat and lon, or a bbox, whose centre is used.
+GET {{search}}/stays/search?destination=lisbon&checkIn={{checkIn}}&checkOut={{checkOut}}&guests=4&rooms=2&stars=4,5&amenities=pool,wifi&minPrice=80&maxPrice=300&sort=rating&{{v}}
+
+### 5. A map: bbox is west,south,east,north. It may cross the antimeridian (west greater than east).
+# The first page also carries totalCount and facets (counts of stars and amenities over everything that matched).
+GET {{search}}/stays/search?bbox=-9.6,38.5,-8.8,39.0&checkIn={{checkIn}}&checkOut={{checkOut}}&sort=distance&$top=10&{{v}}
+
+### 6. A page size and the next page. $top is at most 100; copy nextLink from the answer above as it is.
+# A skiptoken only works with the query it came from: change the destination and it is refused as InvalidSkipToken.
+GET {{search}}/stays/search?destination=lisbon&checkIn={{checkIn}}&checkOut={{checkOut}}&$top=5&{{v}}
+
+### 7. What a mistake looks like: a stay of 31 nights, an unknown parameter and a malformed date, all listed at once.
+GET {{search}}/stays/search?destination=lisbon&checkIn={{checkIn}}&checkOut=2027-01-15&colour=blue&guests=two&{{v}}
+
+### 8. Cars from a point: every location within radiusKm (default 25) with a car free on every rental day.
+# Times are RFC 3339 with an offset (encode + as %2B). A rental day is every started 24 hours.
+GET {{search}}/cars/search?lat=38.7742&lon=-9.1342&radiusKm=30&pickUpAt=2026-12-01T10:00:00%2B00:00&dropOffAt=2026-12-04T10:00:00%2B00:00&{{v}}
+
+### 9. Cars filtered: category is an ACRISS code or its first letters, transmission is Manual or Automatic.
+GET {{search}}/cars/search?lat=38.7742&lon=-9.1342&pickUpAt=2026-12-01T10:00:00%2B00:00&dropOffAt=2026-12-04T10:00:00%2B00:00&category=E&transmission=Automatic&minSeats=5&maxPrice=60&{{v}}
+
+### 10. A one way rental: the car goes back somewhere else. Allowed only between locations of one partner.
+# With a pickUpLocationId and a dropOffLocationId of another partner the answer is 400 OneWayNotAllowed. With a
+# point, only that partner's locations are listed, and oneWay says which ones are not the drop-off itself.
+@pickUp = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9e11
+@dropOff = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9e12
+GET {{search}}/cars/search?pickUpLocationId={{pickUp}}&dropOffLocationId={{dropOff}}&pickUpAt=2026-12-01T10:00:00%2B00:00&dropOffAt=2026-12-04T10:00:00%2B00:00&{{v}}

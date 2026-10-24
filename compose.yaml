@@ -116,6 +116,10 @@ services:
       # index. It is bound to a developer machine; nothing deployed may run this way.
       DISABLE_SECURITY_PLUGIN: "true"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
+      # Search writes through the aliases stays and cars. A write to an alias that does not exist yet must fail,
+      # not create an index of that name, which would make the alias impossible to create afterwards. Everything
+      # else may still be created on first use (Dashboards makes its own system indices).
+      action.auto_create_index: "-stays,-cars,+*"
     ports: ["9200:9200"]
     volumes:
       - opensearch:/usr/share/opensearch/data
@@ -145,6 +149,49 @@ services:
       retries: 10
       start_period: 120s
       start_interval: 5s
+
+  # Search. search-migrate creates the stays and cars aliases, with an index behind each, and exits; search then
+  # reads stays.v1 and cars.v1 into them and answers queries on 8104. Both run the same image:
+  #   docker compose run --rm search-migrate rebuild     # builds the indices again from the topics, no downtime
+  search-migrate:
+    build:
+      context: .
+      dockerfile: src/Services/Search/Viatica.Search.Api/Dockerfile
+    image: viatica/search
+    command: ["migrate"]
+    environment: &search-environment
+      OpenSearch__Uri: http://opensearch:9200
+      Kafka__BootstrapServers: kafka:9092
+      # Public development value, like every secret in this file: signs the $skiptoken of nextLink.
+      Viatica__Api__SkipTokenKey: c2VhcmNoLWRldmVsb3BtZW50LXNraXB0b2tlbi1rZXktMDAwMDAxMjM0NTY3
+      # Search answers anonymously; the authority is only needed if a request carries a token. Keys are fetched over
+      # the compose network, and tokens name the address a person uses.
+      Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+      Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+    depends_on:
+      opensearch: { condition: service_healthy }
+    restart: "no"
+
+  search:
+    build:
+      context: .
+      dockerfile: src/Services/Search/Viatica.Search.Api/Dockerfile
+    image: viatica/search
+    environment: *search-environment
+    ports: ["8104:8080"]
+    depends_on:
+      search-migrate: { condition: service_completed_successfully }
+      kafka-init: { condition: service_completed_successfully }
+    healthcheck:
+      # The runtime image has no curl or wget, so the service answers its own health check: the argument asks the
+      # running server on this container's port whether /health/ready passes.
+      test: ["CMD", "dotnet", "Viatica.Search.Api.dll", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+      start_interval: 2s
 
   valkey:
     image: valkey/valkey:8.1.10-alpine@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507 # 8.1.10-alpine
