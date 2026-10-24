@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- EF Core on Postgres, the Valkey offer cache, the airline HTTP adapters and the Kafka wiring. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Flights.Application\Viatica.Flights.Application.csproj" />
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />
+  </ItemGroup>
+
+</Project>
