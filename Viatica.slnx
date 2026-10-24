@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Viatica.Kernel.Benchmarks/Viatica.Kernel.Benchmarks.csproj" />
     <Project Path="benchmarks/Viatica.OutboxSpike/Viatica.OutboxSpike.csproj" />
   </Folder>
   <Folder Name="/src/" />
@@ -20,6 +21,7 @@
     <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
     <Project Path="tests/Viatica.Contracts.UnitTests/Viatica.Contracts.UnitTests.csproj" />
     <Project Path="tests/Viatica.Kernel.Messaging.IntegrationTests/Viatica.Kernel.Messaging.IntegrationTests.csproj" />
+    <Project Path="tests/Viatica.Kernel.UnitTests/Viatica.Kernel.UnitTests.csproj" />
     <Project Path="tests/Viatica.Testing/Viatica.Testing.csproj" />
   </Folder>
   <Folder Name="/tools/">
