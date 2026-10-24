@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format follows
   every claim has an owner so a stale completion or release cannot touch a newer claim. A crashed request frees its
   id after one lease instead of after the window. `IRepeatabilityStore` gains `RenewAsync` and an owner overload of
   `ReleaseAsync` as default interface methods; `RepeatableResponse` gains an optional `Owner` (#45).
+- A repeatable request from a caller without a subject is refused with `401`; anonymous callers used to share one
+  namespace of ids and could be served each other's stored responses (#51).
 
 ### Added
 

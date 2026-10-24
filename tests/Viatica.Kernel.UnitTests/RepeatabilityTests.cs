@@ -13,10 +13,13 @@ public sealed class RepeatabilityTests(TestApi api) : IClassFixture<TestApi>
     private static string Now => DateTimeOffset.UtcNow.ToString("r", CultureInfo.InvariantCulture);
 
     private Task<HttpResponseMessage> Send(
-        string path, string? id, string? firstSent = null, string body = Body, string user = "alice")
+        string path, string? id, string? firstSent = null, string body = Body, string? user = "alice")
     {
         var request = new HttpRequestMessage(HttpMethod.Post, Http.V(path)) { Content = Http.Json(body) };
-        request.Headers.Add(TestApi.UserHeader, user);
+        if (user is not null)
+        {
+            request.Headers.Add(TestApi.UserHeader, user);
+        }
         if (id is not null)
         {
             request.Headers.Add("Repeatability-Request-ID", id);
@@ -66,6 +69,26 @@ public sealed class RepeatabilityTests(TestApi api) : IClassFixture<TestApi>
 
         bob.StatusCode.ShouldBe(HttpStatusCode.Created);
         api.Counters.Refunds.ShouldBe(before + 2);
+    }
+
+    /// <summary>
+    /// Two anonymous clients sending the same id and body would share one key, and the second would be handed the
+    /// first one's kept response. An anonymous caller has no namespace, so repeatability is refused for it.
+    /// </summary>
+    [Fact]
+    public async Task An_anonymous_caller_cannot_use_repeatability_so_two_of_them_never_share_a_response()
+    {
+        string id = Guid.NewGuid().ToString();
+        string firstSent = Now;
+        int before = api.Counters.Refunds;
+
+        var first = await Send("/refunds", id, firstSent, user: null);
+        var second = await Send("/refunds", id, firstSent, user: null);
+
+        await first.ShouldBeError(HttpStatusCode.Unauthorized, "Unauthorized");
+        await second.ShouldBeError(HttpStatusCode.Unauthorized, "Unauthorized");
+        first.Headers.GetValues("Repeatability-Result").Single().ShouldBe("rejected");
+        api.Counters.Refunds.ShouldBe(before);
     }
 
     [Fact]
