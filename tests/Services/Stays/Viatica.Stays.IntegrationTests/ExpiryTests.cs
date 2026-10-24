@@ -87,7 +87,7 @@ public sealed class ManualExpiryTests(ManualSweepFixture stays) : IClassFixture<
     }
 
     [Fact]
-    public async Task A_commit_after_the_expiry_is_refused_even_before_the_sweeper_has_noticed()
+    public async Task A_commit_past_the_expiry_wins_if_it_reaches_the_hold_before_the_sweeper()
     {
         using EventProbe probe = stays.Probe();
         var scenario = await Scenario.CreateAsync(Host, allotment: 10);
@@ -97,17 +97,15 @@ public sealed class ManualExpiryTests(ManualSweepFixture stays) : IClassFixture<
         await probe.WaitForAsync(m => IsAbout(m, "StayHoldPlaced", request.HoldId));
 
         Host.Clock.Advance(Hold.Lifetime);
-        var marker = new StayHoldReleaseRequested(request.TripId, Guid.CreateVersion7(), Guid.CreateVersion7());
-        await stays.Booking.SendAsync(new StayHoldCommitRequested(request.TripId, request.ItemId, request.HoldId), marker);
-        await probe.WaitForAsync(m => IsAbout(m, "StayHoldReleased", marker.HoldId));
+        await stays.Booking.SendAsync(new StayHoldCommitRequested(request.TripId, request.ItemId, request.HoldId));
+        await probe.WaitForAsync(m => IsAbout(m, "StayHoldCommitted", request.HoldId));
 
-        probe.Received.ShouldNotContain(m => IsAbout(m, "StayHoldCommitted", request.HoldId));
-        (await scenario.NightsAsync()).Count(n => n.Held == 2 && n.Sold == 0).ShouldBe(3, "refused, not sold; the sweeper has not run");
+        (await scenario.NightsAsync()).Count(n => n.Held == 0 && n.Sold == 2).ShouldBe(3, "the held rooms became sold rooms");
 
-        // The sweeper then does its work, and the saga hears it.
-        (await ExpireAsync(request.HoldId)).ShouldBeTrue();
-        await probe.WaitForAsync(m => IsAbout(m, "StayHoldExpired", request.HoldId));
-        (await scenario.NightsAsync()).ShouldAllBe(n => n.Held == 0 && n.Sold == 0);
+        // The sweeper arrives too late to take them back.
+        (await ExpireAsync(request.HoldId)).ShouldBeFalse();
+        probe.Received.ShouldNotContain(m => IsAbout(m, "StayHoldExpired", request.HoldId));
+        (await scenario.NightsAsync()).Count(n => n.Sold == 2).ShouldBe(3);
     }
 
     [Fact]
