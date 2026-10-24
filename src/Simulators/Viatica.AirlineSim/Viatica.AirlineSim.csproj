@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    A test double that plays four airlines behind a supplier-style HTTP API. It is not part of the product, so it
+    references nothing from the kernel: its API shapes, errors and conventions are meant to look foreign to ours.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.AirlineSim.UnitTests" />
+    <InternalsVisibleTo Include="Viatica.AirlineSim.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
