@@ -16,9 +16,8 @@ public static class ViaticaApi
     /// a missing skiptoken key stops the host instead of failing the first paged request.
     /// </summary>
     /// <remarks>
-    /// Repeatability uses whatever <see cref="Microsoft.Extensions.Caching.Distributed.IDistributedCache"/> is
-    /// registered. Register the Redis (Valkey) one in the service; the in-memory fallback added here only works
-    /// for a single instance.
+    /// Repeatable requests default to an in-process store, which is only correct for a single instance. A service
+    /// with repeatable endpoints calls <see cref="RepeatabilityServiceCollectionExtensions.AddValkeyRepeatabilityStore"/>.
     /// </remarks>
     public static TBuilder AddViaticaApi<TBuilder>(this TBuilder builder, Action<ViaticaApiOptions>? configure = null)
         where TBuilder : IHostApplicationBuilder
@@ -36,7 +35,7 @@ public static class ViaticaApi
         services.ConfigureHttpJsonOptions(static options => ViaticaJson.Apply(options.SerializerOptions));
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<SkipTokenCodec>();
-        services.AddDistributedMemoryCache();
+        services.TryAddSingleton<IRepeatabilityStore, InMemoryRepeatabilityStore>();
 
         return builder;
     }

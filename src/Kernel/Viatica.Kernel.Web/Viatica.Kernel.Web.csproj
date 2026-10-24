@@ -7,6 +7,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Atomic SET NX for repeatable requests; see ValkeyRepeatabilityStore. -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Viatica.Kernel\Viatica.Kernel.csproj" />
   </ItemGroup>
 

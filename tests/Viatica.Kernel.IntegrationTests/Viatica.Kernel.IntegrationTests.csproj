@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- The Valkey repeatability store against a real Valkey: the claim is only as atomic as the server makes it. -->
+  <ItemGroup>
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Web\Viatica.Kernel.Web.csproj" />
+  </ItemGroup>
+
+</Project>

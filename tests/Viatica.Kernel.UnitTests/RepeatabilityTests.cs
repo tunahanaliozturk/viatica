@@ -144,4 +144,35 @@ public sealed class RepeatabilityTests(TestApi api) : IClassFixture<TestApi>
         (await first).StatusCode.ShouldBe(HttpStatusCode.OK);
         api.Counters.Slow.ShouldBe(1);
     }
+
+    [Fact]
+    public async Task Of_many_identical_requests_arriving_together_exactly_one_runs()
+    {
+        const int copies = 32;
+        string id = Guid.NewGuid().ToString();
+        string firstSent = Now;
+        using var start = new SemaphoreSlim(0);
+
+        Task<HttpResponseMessage>[] requests = [.. Enumerable.Range(0, copies).Select(_ => Task.Run(async () =>
+        {
+            await start.WaitAsync();
+            return await Send("/refunds/racy", id, firstSent);
+        }))];
+        start.Release(copies);
+        HttpResponseMessage[] responses = await Task.WhenAll(requests);
+
+        api.Counters.Racy.ShouldBe(1);
+        responses.Count(static r => r.StatusCode == HttpStatusCode.Created).ShouldBeGreaterThanOrEqualTo(1);
+        responses.ShouldAllBe(static r => r.StatusCode == HttpStatusCode.Created || r.StatusCode == HttpStatusCode.Conflict);
+        foreach (HttpResponseMessage conflict in responses.Where(static r => r.StatusCode == HttpStatusCode.Conflict))
+        {
+            await conflict.ShouldBeError(HttpStatusCode.Conflict, "Conflict");
+        }
+
+        // Once the first has finished, a straggler gets its response replayed rather than a 409.
+        var late = await Send("/refunds/racy", id, firstSent);
+        late.StatusCode.ShouldBe(HttpStatusCode.Created);
+        late.Headers.Location!.ToString().ShouldBe("/refunds/1");
+        api.Counters.Racy.ShouldBe(1);
+    }
 }

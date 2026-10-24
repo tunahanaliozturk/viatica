@@ -132,6 +132,14 @@ public sealed class TestApi : IAsyncLifetime
             return TypedResults.Ok("done");
         }).WithRepeatability();
 
+        app.MapPost("/refunds/racy", static async (RefundRequest refund, Counters counters) =>
+        {
+            // Long enough that every copy of the request arrives while the first is still inside the handler.
+            int number = Interlocked.Increment(ref counters.Racy);
+            await Task.Delay(200);
+            return TypedResults.Created($"/refunds/{number}", new Refund(number, refund.Amount));
+        }).WithRepeatability();
+
         app.MapPost("/checkouts", static (HttpContext http) =>
             http.Accepted(new Operation("op-1", OperationStatus.NotStarted), "/operations/op-1"));
 
@@ -150,6 +158,7 @@ public sealed class Counters
     public int Declined;
     public int Flaky;
     public int Slow;
+    public int Racy;
 #pragma warning restore CA1051
 
     public TaskCompletionSource SlowGate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
