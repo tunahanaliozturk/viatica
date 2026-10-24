@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
+using Npgsql;
 using Testcontainers.Redis;
 using Viatica.Cars.Application;
 using Viatica.Cars.Infrastructure;
@@ -87,7 +88,9 @@ internal sealed class CarsHost : WebApplicationFactory<Program>
     public static async Task<CarsHost> StartAsync(
         PostgresFixture postgres, KafkaFixture kafka, ValkeyFixture valkey, TimeSpan? sweepInterval = null)
     {
-        string connectionString = await postgres.CreateDatabaseAsync("cars");
+        // A cap on the pool, so a test that starts hundreds of checkouts at once queues them for a connection instead of
+        // asking Postgres for hundreds of its own (it allows 100 in all, and every host in the run shares them).
+        string connectionString = new NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("cars")) { MaxPoolSize = 40 }.ConnectionString;
 
         // Migrate before the host starts: its relay and consumer begin work as soon as it does.
         await using (var db = new CarsDbContext(new DbContextOptionsBuilder<CarsDbContext>().UseNpgsql(connectionString).Options))

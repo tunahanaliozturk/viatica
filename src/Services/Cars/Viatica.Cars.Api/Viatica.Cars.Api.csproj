@@ -20,4 +20,9 @@
     <InternalsVisibleTo Include="Viatica.Cars.IntegrationTests" />
   </ItemGroup>
 
+  <!-- Development keys for the compose stack; they belong on a laptop, not in an image. -->
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>

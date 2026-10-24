@@ -153,4 +153,15 @@ created=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$stays/properties/$pro
   || fail "stays: a draft property is visible without a token"
 ok "stays: ready, public list, a partner token creates a draft only its partner sees"
 
+# Cars ------------------------------------------------------------------------------------------------------------
+
+curl -fsS http://localhost:8102/health/ready > /dev/null || fail "cars: /health/ready did not answer on 8102"
+ok "cars: /health/ready"
+
+# A quote for a location that does not exist is a 404 in the error envelope. Anyone may ask, and no data has to be
+# arranged, so it proves the version check, routing, the database read and the envelope in one request.
+answer=$(curl -sS -X POST "http://localhost:8102/cars/quotes?api-version=2026-11-01" -H "Content-Type: application/json"   -d '{"locationId":"01a16fb5-0000-7000-8000-000000000001","categoryId":"01a16fb5-0000-7000-8000-000000000002","pickUpAt":"2099-01-01T10:00:00Z","dropOffAt":"2099-01-02T10:00:00Z","driverAge":30}')
+grep -q '"code":"LocationNotFound"' <<< "$answer" || fail "cars: unexpected answer to a quote for an unknown location: $answer"
+ok "cars: quotes answer in the error envelope"
+
 echo "stack ok"
