@@ -75,6 +75,31 @@ public sealed class CatalogueTests(PostgresFixture postgres, KafkaFixture kafka,
     }
 
     [Fact]
+    public async Task The_same_id_created_by_many_requests_at_once_is_created_once_and_never_a_500()
+    {
+        HttpClient partner = host.Partner(Guid.NewGuid());
+        Guid id = Guid.CreateVersion7();
+        using var start = new SemaphoreSlim(0);
+        Task<HttpStatusCode>[] creators =
+        [
+            .. Enumerable.Range(0, 12).Select(_ => Task.Run(async () =>
+            {
+                await start.WaitAsync();
+                return (await partner.PutAsync($"/cars/locations/{id}", Scenario.Location())).StatusCode;
+            })),
+        ];
+        start.Release(creators.Length);
+
+        HttpStatusCode[] results = await Task.WhenAll(creators);
+
+        // One create. The others replace it, or lose to the unique id (409) or to the row version (412), which the
+        // service maps from Postgres instead of leaking as a 500.
+        results.Count(static r => r == HttpStatusCode.Created).ShouldBe(1);
+        results.ShouldAllBe(static r => r == HttpStatusCode.Created || r == HttpStatusCode.OK || r == HttpStatusCode.Conflict || r == HttpStatusCode.PreconditionFailed);
+        (await partner.FetchAsync($"/cars/locations/{id}")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task A_change_of_opening_hours_moves_the_etag_even_when_nothing_else_changed()
     {
         HttpClient partner = host.Partner(Guid.NewGuid());

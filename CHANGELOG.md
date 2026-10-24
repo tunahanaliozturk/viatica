@@ -32,3 +32,9 @@ All notable changes to this project are documented here. The format follows
   or none in one SQL statement per hold. Consumes Booking's hold, commit, release and cancel requests, publishes
   listing snapshots and availability versions, and expires unclaimed holds with a hosted sweeper. Proved by a race
   of 200 parallel holds for the last 10 rooms. See `docs/services/stays.md`.
+- Cars service (`src/Services/Cars`, port 8102): rental locations and car categories with ETags and client chosen ids,
+  daily rates and allotments set over a range in one transaction, quotes with a signed 15 minute token (opening
+  hours, one-way fee, young driver surcharge), and holds that take one car on every rental day in a single conditional
+  `UPDATE`. Commit, release and cancel are idempotent, and a sweeper expires holds after 15 minutes
+  (`docs/services/cars.md`, `http/cars.http`).
+- `cars` and `cars-migrate` in `compose.yaml`, and a Cars probe in `deploy/check-stack.sh`.

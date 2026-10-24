@@ -8,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
-using Testcontainers.Redis;
 using Viatica.Cars.Application;
 using Viatica.Cars.Infrastructure;
 using Viatica.Kernel.Web;
@@ -16,25 +15,13 @@ using Viatica.Testing;
 
 [assembly: AssemblyFixture(typeof(PostgresFixture))]
 [assembly: AssemblyFixture(typeof(KafkaFixture))]
-[assembly: AssemblyFixture(typeof(Viatica.Cars.IntegrationTests.ValkeyFixture))]
+[assembly: AssemblyFixture(typeof(ValkeyFixture))]
 
 // One Postgres serves every test class and allows 100 connections. The racing tests open 60 at once on purpose, so
 // the classes take turns instead of sharing that budget.
 [assembly: CollectionBehavior(CollectionBehavior.CollectionPerAssembly)]
 
 namespace Viatica.Cars.IntegrationTests;
-
-/// <summary>The same Valkey image compose runs; the repeatability records the bulk endpoint keeps live in it.</summary>
-public sealed class ValkeyFixture : IAsyncLifetime
-{
-    private readonly RedisContainer _container = new RedisBuilder("valkey/valkey:8.1.10-alpine").Build();
-
-    public string ConnectionString => _container.GetConnectionString();
-
-    public async ValueTask InitializeAsync() => await _container.StartAsync();
-
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
-}
 
 /// <summary>
 /// The real Cars host: its own database in the shared Postgres (migrated the way compose migrates it), its own pair

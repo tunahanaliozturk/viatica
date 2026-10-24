@@ -4,6 +4,57 @@ Every error answers in the envelope described in [conventions.md](conventions.md
 `error.message` is for people. The shared codes (`InvalidRequest`, `NotFound`, `Conflict`, ...) are listed there.
 This page lists what each service adds. Each service keeps its own section self-contained.
 
+## Cars
+
+HTTP errors from `Viatica.Cars.Api`. Quotes need no token; everything else needs a partner token, and a resource of
+another partner is a `404` with the code of what was asked for, so ids do not leak.
+
+| Status | Code | When | Test |
+|---|---|---|---|
+| 404 | `LocationNotFound` | No such location, not yours, or (for a quote) not published | `CatalogueTests.Another_partner_sees_404_and_changes_nothing_on_a_location_that_is_not_theirs`, `QuoteTests.Listings_that_are_not_published_cannot_be_quoted` |
+| 404 | `CategoryNotFound` | No such category, not yours, not published, or not the partner's of that location | `CatalogueTests.Another_partner_sees_404_on_a_category_and_cannot_touch_its_inventory`, `QuoteTests.A_category_of_another_partner_is_not_found_at_this_location` |
+| 400 | `OneWayNotAllowed` | The drop-off location belongs to another partner. `target`: `dropOffLocationId` | `QuoteTests.One_way_to_a_location_of_another_partner_is_not_allowed` |
+| 400 | `DriverTooYoung` | The driver is under the category's minimum age. `target`: `driverAge` | `QuoteTests.A_driver_under_the_category_minimum_is_too_young` |
+| 400 | `LocationClosed` | The pick-up or drop-off is outside opening hours. `target`: `pickUpAt` or `dropOffAt` | `QuoteTests.Pick_up_and_drop_off_must_fall_inside_opening_hours` |
+| 400 | `DropOffBeforePickUp` | The drop-off is not after the pick-up | `QuoteTests.A_drop_off_before_the_pick_up_and_a_pick_up_in_the_past_are_refused` |
+| 400 | `RentalTooLong` | More than 30 rental days | `QuoteTests.A_rental_longer_than_thirty_days_is_refused` |
+| 400 | `PickUpInThePast` | The pick-up is before now | `QuoteTests.A_drop_off_before_the_pick_up_and_a_pick_up_in_the_past_are_refused` |
+| 409 | `SoldOut` | Quote: some day of the rental has no car left, or no inventory row | `QuoteTests.A_day_with_no_car_left_makes_the_whole_rental_sold_out`, `QuoteTests.Days_without_any_inventory_row_are_sold_out` |
+| 409 | `NotPublishable` | Publishing a location with no opening hours | `CatalogueTests.A_location_without_opening_hours_cannot_be_published` |
+| 409 | `AllotmentBelowCommitments` | A bulk update would leave a day with fewer cars than are sold or held. Nothing in the range changes | `InventoryTests.An_allotment_below_what_is_sold_or_held_is_refused_and_no_day_of_the_range_changes` |
+| 409 | `Conflict` | Two writers created the same id, or changed the same days, at once. Read and retry | `CatalogueTests.The_same_id_created_by_many_requests_at_once_is_created_once_and_never_a_500` |
+| 412, 428 | `PreconditionFailed`, `PreconditionRequired` | `PUT` with a stale `ETag`, or without `If-Match` | `CatalogueTests.Putting_the_same_location_again_is_a_replace_and_a_stale_etag_is_refused`, `CatalogueTests.A_put_without_if_match_is_428_and_an_etag_for_a_resource_that_does_not_exist_is_412` |
+
+Validation details (`error.details[].code`, `target` is the request field):
+
+| Code | Target | Rule |
+|---|---|---|
+| `InvalidName` | `name` | Not blank, at most 120 characters |
+| `InvalidAddress`, `InvalidCountryCode` | `address`, `address.countryCode` | Street, city and postal code present; two letter country |
+| `InvalidPosition` | `position` | Latitude -90 to 90, longitude -180 to 180 |
+| `InvalidAirportCode` | `airportCode` | Three letters |
+| `InvalidOpeningHours` | `openingHours` | At most one window per weekday, closing after opening, whole minutes |
+| `InvalidCancellationPolicy` | `cancellationPolicy` | 0 to 8760 free hours, a known penalty |
+| `InvalidAcriss` | `acriss` | Four letters |
+| `InvalidSeats`, `InvalidBags`, `InvalidMinimumDriverAge` | `seats`, `bags`, `minimumDriverAge` | 1 to 20, 0 to 20, 18 to 99 |
+| `InvalidTransmission`, `InvalidFuel`, `InvalidImageUrl` | the field | Known value; image is an absolute http or https URL |
+| `InvalidFee` | `oneWayFee`, `youngDriverSurchargePerDay` | EUR, 0 to 10000 |
+| `InvalidDateRange`, `DateInThePast`, `DateTooFarAhead` | `to`, `from` | Range of 1 to 366 days, starting no earlier than yesterday, ending no later than 365 days ahead |
+| `InvalidAllotment`, `InvalidRate` | `allotment`, `rate` | 0 to 1000; EUR 0 to 10000 |
+| `InvalidDriverAge` | `driverAge` | 18 to 99 |
+| `InvalidLocationId`, `InvalidCategoryId` | the field | Not an empty id |
+
+### Reasons on `CarHoldRejected`
+
+Hold requests come over Kafka, so their failures are events, not HTTP errors. `CarHoldRejected.Reason` is one of:
+
+| Reason | Meaning | Test |
+|---|---|---|
+| `SoldOut` | Some day of the rental had no car left; nothing is held | `HoldConcurrencyTests.Sixty_checkouts_racing_for_the_last_five_cars_of_a_day_produce_exactly_five_holds`, `HoldConcurrencyTests.A_missing_day_is_sold_out_not_an_error_and_leaves_the_other_days_alone` |
+| `NotBookable` | The location or category is no longer on sale, the drop-off is no longer the same partner's, or the minimum age was raised | `HoldLifecycleTests.A_listing_taken_down_after_the_quote_is_not_bookable`, `HoldLifecycleTests.A_minimum_age_raised_after_the_quote_is_not_bookable` |
+| `QuoteExpired` | The token is older than 15 minutes | `HoldLifecycleTests.An_expired_token_is_refused_as_expired` |
+| `QuoteInvalid` | The token is not ours, was altered, is of another kind, or was issued for a different driver age | `HoldLifecycleTests.A_tampered_token_is_refused_as_invalid`, `HoldLifecycleTests.A_token_is_only_good_for_the_driver_it_was_quoted_for` |
+
 ## Flights
 
 HTTP errors from `Viatica.Flights.Api`. Search, paging and re-price need no token.
