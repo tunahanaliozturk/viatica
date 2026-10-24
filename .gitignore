@@ -43,3 +43,6 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+
+# Repository-local SDK (install-dotnet.*)
+.dotnet/

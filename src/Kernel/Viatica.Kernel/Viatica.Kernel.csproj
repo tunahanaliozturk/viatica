@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared rules every service follows: error codes, paging types, money, the validation behaviour.
+    No ASP.NET Core and no infrastructure here, so a Domain project can reference it.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="OrionGuard" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+</Project>

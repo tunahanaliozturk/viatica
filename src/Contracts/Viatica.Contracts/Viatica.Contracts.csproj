@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Integration events that cross service boundaries. Plain records, no dependencies, so any service can take it. -->
+
+</Project>

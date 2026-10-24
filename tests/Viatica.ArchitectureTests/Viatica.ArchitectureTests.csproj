@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <!--
+    Every service host goes here as it is created, so the test can read what each compiled layer really
+    references. The kernel and the contracts are referenced directly because they have no host of their own.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Web\Viatica.Kernel.Web.csproj" />
+    <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />
+  </ItemGroup>
+
+</Project>

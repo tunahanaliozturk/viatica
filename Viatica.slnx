@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Contracts/">
+    <Project Path="src/Contracts/Viatica.Contracts/Viatica.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Kernel/">
+    <Project Path="src/Kernel/Viatica.Kernel/Viatica.Kernel.csproj" />
+    <Project Path="src/Kernel/Viatica.Kernel.Messaging/Viatica.Kernel.Messaging.csproj" />
+    <Project Path="src/Kernel/Viatica.Kernel.Web/Viatica.Kernel.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Viatica.LicenseAudit/Viatica.LicenseAudit.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    name: build, format, licences, architecture, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # global.json pins the .NET 11 SDK; setup-dotnet installs exactly that one, prerelease included.
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Viatica.slnx
+
+      - name: Build
+        run: dotnet build Viatica.slnx --configuration Release --no-restore
+
+      # Whitespace and style only. Analyzer-level style is already enforced by EnforceCodeStyleInBuild with
+      # warnings as errors, so the full formatter would build a second workspace for no benefit.
+      - name: Verify formatting
+        run: |
+          dotnet format whitespace Viatica.slnx --verify-no-changes --no-restore
+          dotnet format style Viatica.slnx --verify-no-changes --no-restore
+
+      # Reads the licence of every package in the tree, at every depth, from the restored packages on disk.
+      - name: Audit dependency licences
+        run: dotnet run --project tools/Viatica.LicenseAudit --configuration Release --no-build -- .
+
+      - name: Architecture
+        run: dotnet run --project tests/Viatica.ArchitectureTests --configuration Release --no-build
+
+      # Every project under tests/ whose name ends in UnitTests, so a new service needs no CI change.
+      - name: Unit tests
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          for project in tests/**/*.UnitTests/*.csproj; do
+            dotnet run --project "$project" --configuration Release --no-build
+          done
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Real Postgres, Kafka, OpenSearch and Redis in containers. The claims under test are about the outbox,
+      # the inbox, holds under contention and deadlines, and an in-memory substitute would prove none of them.
+      - name: Integration tests
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          for project in tests/**/*.IntegrationTests/*.csproj; do
+            dotnet run --project "$project" --configuration Release
+          done

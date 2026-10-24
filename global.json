@@ -1,0 +1,9 @@
+{
+  "sdk": {
+    "version": "11.0.100-rc.2.26504.105",
+    "allowPrerelease": true,
+    "rollForward": "latestFeature",
+    "paths": [".dotnet", "$host$"],
+    "errorMessage": "The .NET 11 SDK was not found. Run ./install-dotnet.sh or ./install-dotnet.ps1 to install it into .dotnet/."
+  }
+}
