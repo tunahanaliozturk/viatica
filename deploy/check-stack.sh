@@ -132,4 +132,25 @@ curl -fsS -o /dev/null -X POST -H "Content-Type: application/x-protobuf" --data-
 curl -fsS -o /dev/null http://localhost:18888/ || fail "dashboard: UI not answering on 18888"
 ok "dashboard: accepts OTLP on 4318, UI on 18888"
 
+# Stays -----------------------------------------------------------------------------------------------------------
+
+# The service the compose file builds, behind its own health check. Beyond "ready", one round trip through the
+# real token: Keycloak's partner token must be accepted by Stays (audience, issuer, partnerId claim), the draft the
+# partner creates must be invisible to everybody else, and the public list must answer with an api-version.
+stays=http://localhost:8101
+version=api-version=2026-11-01
+
+curl -fsS "$stays/health/ready" > /dev/null || fail "stays: /health/ready does not answer"
+curl -fsS "$stays/properties?$version" | grep -q '"value"' || fail "stays: the public property list does not answer"
+
+property_id=$(printf '%08x-%04x-4%03x-8%03x-%012x' $((RANDOM * 32768 + RANDOM)) "$RANDOM" $((RANDOM % 4096)) $((RANDOM % 4096)) $(((RANDOM << 30) | (RANDOM << 15) | RANDOM)))
+partner_token=$(access_token partner-stays1) || fail "keycloak: partner-stays1 cannot sign in"
+created=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$stays/properties/$property_id?$version" \
+  -H "Authorization: Bearer $partner_token" -H 'Content-Type: application/json' \
+  -d '{"name":"Check Stack Inn","description":"Created by deploy/check-stack.sh.","address":{"line1":"1 Test Street","city":"Lisbon","postalCode":"1000-001","countryCode":"PT"},"location":{"latitude":38.7,"longitude":-9.1},"starRating":3,"amenities":["wifi"],"checkInFrom":"15:00:00","checkOutUntil":"11:00:00","cancellationPolicy":{"freeUntilHoursBeforeStart":24,"penaltyAfter":"FirstUnit"}}')
+[[ $created == 201 ]] || fail "stays: creating a property with a Keycloak partner token answered $created, expected 201"
+[[ $(curl -sS -o /dev/null -w '%{http_code}' "$stays/properties/$property_id?$version") == 404 ]] \
+  || fail "stays: a draft property is visible without a token"
+ok "stays: ready, public list, a partner token creates a draft only its partner sees"
+
 echo "stack ok"
