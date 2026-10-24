@@ -27,6 +27,8 @@ and none of them may be reused in any other environment.
 | `valkey` | `valkey/valkey:8.1.10-alpine` | 6379 | none | Flight offer cache and rate limit counters (Redis protocol) |
 | `keycloak` | `quay.io/keycloak/keycloak:26.8.1` | 8080 | admin console `admin` / `admin`; users below | Identity: realm `viatica`, OIDC for the web app and tokens for the services |
 | `dashboard` | `mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1` | 18888 (UI), 4317 (OTLP gRPC), 4318 (OTLP HTTP) | none | OpenTelemetry sink: traces, metrics and logs from every service |
+| `stays-migrate` | built from `src/Services/Stays` | none | `stays` role | One-shot: applies the Stays migrations, then exits 0 |
+| `stays` | built from `src/Services/Stays` | 8101 | tokens from Keycloak, audience `stays-api` | The Stays service: catalogue, rates, quotes and holds (`docs/services/stays.md`) |
 
 Images are pinned by digest in `compose.yaml`; the table shows the tags.
 

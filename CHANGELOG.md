@@ -27,3 +27,8 @@ All notable changes to this project are documented here. The format follows
   Flights share. `Viatica.Testing` gains a Valkey fixture.
 - `airline-sim` and its migrate step in `compose.yaml` (port 8201), and `flights` with its own.
 - `FlightRejectionReason.InvalidPassengers` in `Viatica.Contracts`.
+- Stays service (port 8101): partner-owned properties and room types with `ETag`/`If-Match`, a bulk calendar edit
+  over up to a year in one transaction, signed 15 minute quote tokens, and holds that reserve every night of a stay
+  or none in one SQL statement per hold. Consumes Booking's hold, commit, release and cancel requests, publishes
+  listing snapshots and availability versions, and expires unclaimed holds with a hosted sweeper. Proved by a race
+  of 200 parallel holds for the last 10 rooms. See `docs/services/stays.md`.

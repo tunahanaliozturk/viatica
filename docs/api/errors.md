@@ -48,3 +48,28 @@ Order requests come over Kafka, so their failures are events, not HTTP errors. `
 | `InvalidPassengers` | The sealed list did not authenticate, did not fit the offer, or broke a rule (FLT-5) | `OrderCreationTests.Passengers_that_do_not_fit_the_offer_are_rejected_before_the_airline_is_asked` |
 
 `InvalidPassengers` is new in `Viatica.Contracts` with this service; the design lists it as a Flights error code.
+
+## Stays
+
+Where a code appears in `details[]` of a `400 InvalidRequest`, the `target` is the JSON field of the request.
+
+| Code | Status | When |
+|---|---|---|
+| `PropertyNotFound` | 404 | No such property, or one the caller may not know exists: a draft seen by anyone but its partner or an admin, or a property of another partner. Never `403`. |
+| `RoomTypeNotFound` | 404 | The property exists for the caller but has no such room type. |
+| `PropertyNotPublished` | 409 | A quote was asked for a property that exists and is not on sale. |
+| `NoRoomTypes` | 409 | Publishing a property that has no room type. |
+| `AlreadyExists` | 409 | `PUT` with the id of a property or room type that exists with other values. Change it with `PATCH` and `If-Match`. |
+| `SoldOut` | 409 | A quote for a stay in which at least one night has no rate or fewer free rooms than asked for. As a hold outcome the same word is `HoldRejectionReason.SoldOut`. |
+| `AllotmentBelowBooked` | 409 | A calendar edit would set a night's allotment below what is already sold or held. The whole edit is refused. |
+| `StayTooLong` | 400 | A stay of more than 30 nights. `target`: `checkOut`. |
+| `CheckOutBeforeCheckIn` | 400 | `checkOut` is not after `checkIn`. `target`: `checkOut`. |
+| `CheckInInPast` | 400 | `checkIn` is before yesterday in UTC. `target`: `checkIn`. |
+| `OccupancyExceeded` | 400 | More guests than the requested rooms sleep. `target`: `guests`. |
+| `InvalidDateRange` | 400 | A calendar range whose `to` is before its `from`, or, when reading the calendar, longer than 367 nights. |
+| `OutsideRateWindow` | 400 | A calendar range that starts in the past or ends more than 365 days ahead. |
+| `QuoteExpired` | n/a | Not an HTTP error. A hold request carried a genuine quote token past its 15 minutes; the answer is `StayHoldRejected` with this reason. |
+| `QuoteInvalid` | n/a | Not an HTTP error. A hold request carried a token that is not Stays' own, was altered, or does not match the number of rooms asked for; the answer is `StayHoldRejected` with this reason. |
+
+Two refusals use shared codes: a concurrent creation of the same id is `409 Conflict`, and a stale `If-Match` is `412
+PreconditionFailed`, as the conventions describe.
