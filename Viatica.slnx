@@ -8,7 +8,12 @@
     <Project Path="src/Kernel/Viatica.Kernel.Messaging/Viatica.Kernel.Messaging.csproj" />
     <Project Path="src/Kernel/Viatica.Kernel.Web/Viatica.Kernel.Web.csproj" />
   </Folder>
+  <Folder Name="/src/Simulators/">
+    <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Viatica.AirlineSim.IntegrationTests/Viatica.AirlineSim.IntegrationTests.csproj" />
+    <Project Path="tests/Viatica.AirlineSim.UnitTests/Viatica.AirlineSim.UnitTests.csproj" />
     <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
     <Project Path="tests/Viatica.Contracts.UnitTests/Viatica.Contracts.UnitTests.csproj" />
   </Folder>
