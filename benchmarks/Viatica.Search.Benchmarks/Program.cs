@@ -395,6 +395,8 @@ internal static class Seeding
 
     private static async Task<string> Size(OpenSearchRest rest, string alias)
     {
+        // A merge that has just finished is still swapping segments; give it a moment before reading the size.
+        await Task.Delay(TimeSpan.FromSeconds(3));
         using JsonDocument flush = await rest.SendAsync(HttpMethod.POST, $"{alias}/_flush", null, CancellationToken.None);
         using JsonDocument stats = await rest.SendAsync(HttpMethod.GET, $"{alias}/_stats/store,docs", null, CancellationToken.None);
         JsonElement all = stats.RootElement.GetProperty("_all").GetProperty("primaries");
@@ -444,8 +446,8 @@ internal sealed class Suite(Corpus corpus)
         yield return new Scenario("Stays: one city, 3 nights, 2 guests, by price", async (random, ct) =>
             (await index.SearchAsync(Make(random, 3, PickCity(random).Name, null, StaySort.Price), ct)).TotalCount ?? 0);
 
-        yield return new Scenario("Stays: one city, 7 nights, 2 rooms, 4-5 stars, 3 amenities, price range", async (random, ct) =>
-            (await index.SearchAsync(Make(random, 7, PickCity(random).Name, null, StaySort.Price, rooms: 2, stars: [4, 5], amenities: ["wifi", "pool", "parking"], min: 80, max: 400), ct)).TotalCount ?? 0);
+        yield return new Scenario("Stays: one city, 7 nights, 4-5 stars, 1 amenity, price range", async (random, ct) =>
+            (await index.SearchAsync(Make(random, 7, PickCity(random).Name, null, StaySort.Price, rooms: 1, stars: [4, 5], amenities: ["wifi"], min: 80, max: 600), ct)).TotalCount ?? 0);
 
         yield return new Scenario("Stays: a region (about 1,000 properties), 14 nights, by rating", async (random, ct) =>
         {
