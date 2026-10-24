@@ -1,0 +1,18 @@
+{
+  "tripId": "40eb640d-f2ca-5254-ebf2-57553e500ae3",
+  "travellerId": "c36baca0-b5ff-ffdf-7faa-d3ca64905701",
+  "total": {
+    "amount": "312.50",
+    "currency": "EUR"
+  },
+  "items": [
+    {
+      "itemId": "93078425-9b65-f343-0249-6467efa4a857",
+      "kind": "Stay",
+      "total": {
+        "amount": "312.50",
+        "currency": "EUR"
+      }
+    }
+  ]
+}

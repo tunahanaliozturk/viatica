@@ -1,0 +1,15 @@
+{
+  "propertyId": "0ebaa8d8-47d2-bc8d-0b5c-5c31ef67c942",
+  "roomTypeId": "69510302-32c5-dcee-e553-c2362da0ab86",
+  "availabilityVersion": 7,
+  "nights": [
+    {
+      "date": "2026-12-01",
+      "available": 2,
+      "rate": {
+        "amount": "312.50",
+        "currency": "EUR"
+      }
+    }
+  ]
+}

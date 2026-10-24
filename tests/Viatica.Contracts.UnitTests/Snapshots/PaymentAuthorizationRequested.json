@@ -1,0 +1,9 @@
+{
+  "tripId": "40eb640d-f2ca-5254-ebf2-57553e500ae3",
+  "paymentId": "56aa640d-a4ab-99b1-bece-d485f566fb0d",
+  "amount": {
+    "amount": "312.50",
+    "currency": "EUR"
+  },
+  "paymentMethodToken": "PaymentMethodToken"
+}
