@@ -203,7 +203,7 @@ That is the v1 scope of `docs/requirements.md`; a second currency means a curren
 ## Tests
 
 `dotnet run --project tests/Services/Stays/Viatica.Stays.UnitTests` (47 tests, no containers) and
-`dotnet run --project tests/Services/Stays/Viatica.Stays.IntegrationTests` (67 tests; needs Docker for Postgres 18,
+`dotnet run --project tests/Services/Stays/Viatica.Stays.IntegrationTests` (68 tests; needs Docker for Postgres 18,
 Kafka and Valkey). The integration suite runs the real host against the real migration, with a stand-in for Booking
 that writes to `booking.v1` through an outbox. Classes run one at a time, because each starts a whole service and
 the Postgres container allows 100 connections.
