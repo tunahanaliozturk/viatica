@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Web\Viatica.Kernel.Web.csproj" />
+    <ProjectReference Include="..\Viatica.Testing\Viatica.Testing.csproj" />
   </ItemGroup>
 
 </Project>
