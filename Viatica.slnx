@@ -19,6 +19,7 @@
     <Project Path="tests/Viatica.AirlineSim.UnitTests/Viatica.AirlineSim.UnitTests.csproj" />
     <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
     <Project Path="tests/Viatica.Contracts.UnitTests/Viatica.Contracts.UnitTests.csproj" />
+    <Project Path="tests/Viatica.Kernel.Messaging.IntegrationTests/Viatica.Kernel.Messaging.IntegrationTests.csproj" />
     <Project Path="tests/Viatica.Testing/Viatica.Testing.csproj" />
   </Folder>
   <Folder Name="/tools/">

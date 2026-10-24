@@ -9,6 +9,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The crash test drives one message through the consumer by hand and then drops the Kafka client unclosed. -->
+    <InternalsVisibleTo Include="Viatica.Kernel.Messaging.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Viatica.Kernel\Viatica.Kernel.csproj" />
     <ProjectReference Include="..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
   </ItemGroup>

@@ -78,9 +78,16 @@ public sealed class EventProbe : IDisposable
                 throw new TimeoutException($"{failure()} within {limit}; {_received.Count} message(s) read in all.");
             }
 
-            if (_consumer.Consume(TimeSpan.FromMilliseconds(100)) is { IsPartitionEOF: false } result)
+            try
             {
-                _received.Add(ProbedMessage.From(result));
+                if (_consumer.Consume(TimeSpan.FromMilliseconds(100)) is { IsPartitionEOF: false } result)
+                {
+                    _received.Add(ProbedMessage.From(result));
+                }
+            }
+            catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
+            {
+                // The topic is created by the first message sent to it, a dead letter topic say; wait for it.
             }
         }
     }
@@ -92,12 +99,18 @@ public sealed class EventProbe : IDisposable
     }
 }
 
-/// <summary>One message as it sat on the topic: Kafka key and headers, and the envelope fields parsed out.</summary>
+/// <summary>
+/// One message as it sat on the topic: Kafka key, headers and raw value, and the envelope fields parsed out. A value
+/// that is not an envelope (what a dead letter topic may hold) leaves <see cref="IsEnvelope"/> false and the
+/// envelope fields empty.
+/// </summary>
 public sealed record ProbedMessage(
     string Key,
     int Partition,
     long Offset,
     IReadOnlyDictionary<string, string> Headers,
+    byte[] Value,
+    bool IsEnvelope,
     Guid Id,
     string Type,
     int Version,
@@ -107,24 +120,35 @@ public sealed record ProbedMessage(
 {
     internal static ProbedMessage From(ConsumeResult<string, byte[]> result)
     {
-        using JsonDocument document = JsonDocument.Parse(result.Message.Value);
-        JsonElement root = document.RootElement;
+        Dictionary<string, string> headers =
+            result.Message.Headers?.ToDictionary(static h => h.Key, static h => Encoding.UTF8.GetString(h.GetValueBytes())) ?? [];
+        var raw = new ProbedMessage(
+            result.Message.Key, result.Partition.Value, result.Offset.Value, headers, result.Message.Value,
+            IsEnvelope: false, Guid.Empty, "", 0, default, null, default);
 
-        return new ProbedMessage(
-            result.Message.Key,
-            result.Partition.Value,
-            result.Offset.Value,
-            result.Message.Headers?.ToDictionary(static h => h.Key, static h => Encoding.UTF8.GetString(h.GetValueBytes()))
-                ?? [],
-            root.GetProperty("id").GetGuid(),
-            root.GetProperty("type").GetString()!,
-            root.GetProperty("version").GetInt32(),
-            root.GetProperty("occurredAt").GetDateTimeOffset(),
-            root.TryGetProperty("traceparent", out JsonElement trace) ? trace.GetString() : null,
-            root.GetProperty("data").Clone());
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(result.Message.Value);
+            JsonElement root = document.RootElement;
+
+            return raw with
+            {
+                IsEnvelope = true,
+                Id = root.GetProperty("id").GetGuid(),
+                Type = root.GetProperty("type").GetString()!,
+                Version = root.GetProperty("version").GetInt32(),
+                OccurredAt = root.GetProperty("occurredAt").GetDateTimeOffset(),
+                TraceParent = root.TryGetProperty("traceparent", out JsonElement trace) ? trace.GetString() : null,
+                Data = root.GetProperty("data").Clone(),
+            };
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
+        {
+            return raw;
+        }
     }
 
     /// <summary>Reads <see cref="Data"/> as a string property, for predicates that match on a field.</summary>
     public string? DataString(string property) =>
-        Data.TryGetProperty(property, out JsonElement value) ? value.ToString() : null;
+        IsEnvelope && Data.TryGetProperty(property, out JsonElement value) ? value.ToString() : null;
 }
