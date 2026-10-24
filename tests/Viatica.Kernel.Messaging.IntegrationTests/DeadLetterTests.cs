@@ -38,6 +38,28 @@ public sealed class DeadLetterTests(PostgresDatabase database, KafkaFixture kafk
     }
 
     [Fact]
+    public async Task A_null_valued_message_goes_to_the_dlq_and_its_partition_moves_on()
+    {
+        string topic = await kafka.CreateTopicAsync("tombstone", partitions: 1);
+        string key = Guid.NewGuid().ToString();
+        using IHost host = await TestService.StartAsync(database.ConnectionString, kafka, topic, consumerGroup: "tombstone");
+        using EventProbe deadLetters = kafka.Probe(topic + ".dlq");
+
+        using (IProducer<string, byte[]> producer = new ProducerBuilder<string, byte[]>(new ProducerConfig { BootstrapServers = kafka.BootstrapServers }).Build())
+        {
+            await producer.ProduceAsync(topic, new Message<string, byte[]> { Key = key, Value = null! });
+        }
+
+        await TestService.PublishAsync(host, new ThingHappened(key, 1));
+
+        ProbedMessage parked = await deadLetters.WaitForAsync(m => m.Key == key);
+        parked.Value.ShouldBeNull();
+        parked.Headers["dlq-attempts"].ShouldBe("0");
+        parked.Headers["dlq-error-type"].ShouldStartWith("System.Text.Json.");
+        await Eventually.MatchesAsync(() => TestService.AppliedAsync(host, key), static rows => rows.Count == 1);
+    }
+
+    [Fact]
     public async Task A_message_that_cannot_be_read_goes_to_the_dlq_without_retries()
     {
         string topic = await kafka.CreateTopicAsync("garbage", partitions: 1);
