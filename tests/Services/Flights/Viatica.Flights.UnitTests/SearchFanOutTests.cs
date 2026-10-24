@@ -92,12 +92,28 @@ public sealed class SearchFanOutTests
                 return Make.Offers("YZ", 1m);
             });
 
+        // The safety net waits 150 ms longer than the deadline. Fake time is moved up to just short of the deadline,
+        // then to exactly the safety net, and then frozen. Reading the clock after the search finished would also
+        // count the steps the pump took while the handler's continuations were still queued, which on a busy CI
+        // runner is a few hundred fake milliseconds of noise.
         DateTimeOffset started = clock.GetUtcNow();
-        await RunAsync(Handler(shopping));
+        Task<SearchFlightsResult> search = Handler(shopping).Handle(Command(), CancellationToken.None);
 
-        // The safety net waits 150 ms longer than the 2.5 s deadline; the fake clock moves in 50 ms steps.
-        (clock.GetUtcNow() - started).ShouldBeLessThanOrEqualTo(TimeSpan.FromMilliseconds(2750));
-        (clock.GetUtcNow() - started).ShouldBeGreaterThanOrEqualTo(options.SearchDeadline);
+        while (clock.GetUtcNow() - started < options.SearchDeadline - TimeSpan.FromMilliseconds(50))
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(50));
+            await Task.Delay(1, TestContext.Current.CancellationToken);
+        }
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        search.IsCompleted.ShouldBeFalse("the search answered before the deadline while an airline was still working");
+
+        clock.Advance(started + options.SearchDeadline + TimeSpan.FromMilliseconds(150) - clock.GetUtcNow());
+
+        // No more fake time from here on: the search has to finish on what it has.
+        SearchFlightsResult result = await search.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        result.Case<FlightSearchPage>().IncompleteSuppliers.ShouldBe([new IncompleteSupplier("YZ", IncompleteReason.Timeout)]);
     }
 
     [Fact]
