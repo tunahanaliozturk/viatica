@@ -1,0 +1,40 @@
+{
+  "propertyId": "0ebaa8d8-47d2-bc8d-0b5c-5c31ef67c942",
+  "partnerId": "8bac7837-2401-4e81-547f-4a92c026eda6",
+  "listingVersion": 7,
+  "name": "Name",
+  "description": "Description",
+  "address": {
+    "line1": "Line1",
+    "city": "City",
+    "region": "Region",
+    "postalCode": "PostalCode",
+    "countryCode": "CountryCode"
+  },
+  "location": {
+    "latitude": 38.7223,
+    "longitude": 38.7223
+  },
+  "starRating": 2,
+  "amenities": [
+    "Amenities"
+  ],
+  "checkInFrom": "15:00:00",
+  "checkOutUntil": "15:00:00",
+  "cancellationPolicy": {
+    "freeUntilHoursBeforeStart": 2,
+    "penaltyAfter": "FirstUnit"
+  },
+  "roomTypes": [
+    {
+      "roomTypeId": "69510302-32c5-dcee-e553-c2362da0ab86",
+      "name": "Name",
+      "maxOccupancy": 2,
+      "beds": "Beds",
+      "amenities": [
+        "Amenities"
+      ]
+    }
+  ],
+  "updatedAt": "2026-12-01T09:30:00+00:00"
+}

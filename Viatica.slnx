@@ -10,6 +10,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
+    <Project Path="tests/Viatica.Contracts.UnitTests/Viatica.Contracts.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Viatica.LicenseAudit/Viatica.LicenseAudit.csproj" />

@@ -1,0 +1,15 @@
+{
+  "locationId": "5975fd8c-5f35-75e9-ab86-c8c885d30d56",
+  "categoryId": "13a0b810-e9b3-9f87-3277-a28d58787b08",
+  "availabilityVersion": 7,
+  "days": [
+    {
+      "date": "2026-12-01",
+      "available": 2,
+      "rate": {
+        "amount": "312.50",
+        "currency": "EUR"
+      }
+    }
+  ]
+}

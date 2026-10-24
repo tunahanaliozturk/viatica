@@ -1,0 +1,15 @@
+{
+  "holdId": "a38558da-b538-9d81-1d83-cdc6023ff61d",
+  "tripId": "40eb640d-f2ca-5254-ebf2-57553e500ae3",
+  "itemId": "93078425-9b65-f343-0249-6467efa4a857",
+  "locationId": "5975fd8c-5f35-75e9-ab86-c8c885d30d56",
+  "categoryId": "13a0b810-e9b3-9f87-3277-a28d58787b08",
+  "dropOffLocationId": "9d9c6344-8eed-838e-cc20-871b57842077",
+  "pickUpAt": "2026-12-01T09:30:00+00:00",
+  "dropOffAt": "2026-12-01T09:30:00+00:00",
+  "total": {
+    "amount": "312.50",
+    "currency": "EUR"
+  },
+  "expiresAt": "2026-12-01T09:30:00+00:00"
+}

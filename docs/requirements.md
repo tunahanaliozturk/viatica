@@ -84,7 +84,7 @@ checks ownership.
 |---|---|---|
 | **Stays** | Properties, room types, nightly rates, allotments, holds | PostgreSQL |
 | **Cars** | Rental locations, car categories, daily rates, allotments, holds | PostgreSQL |
-| **Flights** | Supplier adapters, offer cache, flight orders mirrored from airlines | PostgreSQL + Redis |
+| **Flights** | Supplier adapters, offer cache, flight orders mirrored from airlines | PostgreSQL + Valkey |
 | **Search** | Query shaped copies of published stays and cars with availability | OpenSearch |
 | **Booking** | Trips, trip items, the checkout saga, cancellation policy evaluation | PostgreSQL |
 | **Payments** | Payment intents, provider calls, refunds | PostgreSQL |
@@ -131,7 +131,7 @@ Invariant: for every room type and night, `sold + held <= allotment`, enforced i
   children, infants) and cabin. Search fans out to every configured airline in parallel with a
   2.5 s deadline. Results that arrive late are dropped from this response and the response lists
   them under `incompleteSuppliers`.
-- **FLT-2** Results are offers with an `expiresAt`. Offers are cached in Redis for their lifetime
+- **FLT-2** Results are offers with an `expiresAt`. Offers are cached in Valkey for their lifetime
   under a search id, so paging through results does not call the airlines again.
 - **FLT-3** Before an offer goes into a trip it is re-priced with the airline. A price change is
   shown to the traveller, never applied silently.
@@ -355,7 +355,7 @@ Decision after reviewing OrionGuard 7.0.0 (MIT, only dependency is
 ## 10. Architecture and layout
 
 Per service: `Domain` (no framework dependencies except OrionGuard), `Application` (use cases,
-Relevox handlers, validators, `I<Service>Db`), `Infrastructure` (EF Core, Kafka, OpenSearch, Redis,
+Relevox handlers, validators, `I<Service>Db`), `Infrastructure` (EF Core, Kafka, OpenSearch, Valkey,
 supplier adapters), `Api` (minimal API host). Shared code in a kernel. An architecture test reads
 each assembly's real references and fails on a wrong arrow.
 
@@ -380,7 +380,7 @@ viatica/
 ├── tests/
 │   ├── Viatica.ArchitectureTests/
 │   ├── Viatica.<Service>.UnitTests/
-│   ├── Viatica.<Service>.IntegrationTests/  # Testcontainers: Postgres, Kafka, OpenSearch, Redis
+│   ├── Viatica.<Service>.IntegrationTests/  # Testcontainers: Postgres, Kafka, OpenSearch, Valkey
 │   ├── Viatica.SystemTests/                 # whole stack: saga, chaos, reconciliation
 │   └── Viatica.Testing/                     # shared fixtures, event probe, test tokens
 ├── load/  benchmarks/  tools/Viatica.LicenseAudit/
@@ -398,7 +398,7 @@ viatica/
 | Mediator | Relevox 1.3.0 |
 | Validation, DDD primitives | OrionGuard 7.0.0 (section 8) |
 | Persistence | EF Core 11 + Npgsql provider 11 (rc.2 now), PostgreSQL 18 |
-| Cache | Redis (flight offers, rate limiting state) |
+| Cache | Valkey 8 (Redis protocol, BSD licence): flight offers, repeatability records |
 | Messaging | Apache Kafka (KRaft), Confluent.Kafka 2.16.0 |
 | Search | OpenSearch 3.x (Apache 2.0), OpenSearch.Client 2.2.0 |
 | Gateway | YARP 2.3.0 |
@@ -408,9 +408,9 @@ viatica/
 | Load | k6 run as an external tool, or a small .NET harness; NBomber excluded (commercial) |
 | Frontend | Vue 3.5, Vite 8, TypeScript 7, Pinia 4, Vue Router 5, MapLibre GL for maps |
 
-Elasticsearch is excluded on licence grounds (SSPL / ELv2 / AGPL). Redis server 8 is AGPL /
-RSAL / SSPL; it runs as a separate process the product talks to over the network, which the licence
-policy allows, and Valkey (BSD) is the drop in if that ever changes. Aspire hosting packages stay out
+Elasticsearch is excluded on licence grounds (SSPL / ELv2 / AGPL). Redis 8 is AGPL /
+RSAL / SSPL, so the cache is Valkey (BSD), which speaks the same protocol through StackExchange.Redis.
+Aspire hosting packages stay out
 or pinned to 13.4.6 because newer ones pull in JsonPatch.Net, which asks a maintenance fee.
 
 ## 12. Non-functional requirements
@@ -496,5 +496,5 @@ latency and error rate per airline, offers re-priced, projection lag, outbox age
 | Scope is large | Milestones ship independently; the checkout saga (M5) is the centre, everything else can be thinner if time runs out |
 | .NET 11 GA slips or breaks something from RC2 | RC2 is go-live; the bump is its own PR and CI decides |
 | A dependency has no .NET 11 / EF Core 11 build | Checked in M0: Npgsql 11 rc.2 exists; OrionGuard EF package is the open one |
-| Dev machine memory (OpenSearch, Kafka, Keycloak, Redis, four Postgres schemas, seven services) | One Postgres instance with a database per service; OpenSearch heap capped at 1 GB; load runs in CI or on a stated machine |
+| Dev machine memory (OpenSearch, Kafka, Keycloak, Valkey, four Postgres schemas, seven services) | One Postgres instance with a database per service; OpenSearch heap capped at 1 GB; load runs in CI or on a stated machine |
 | Docker Hub pulls are slow on the office network | Pre pull images; heavy container tests run in GitHub Actions |

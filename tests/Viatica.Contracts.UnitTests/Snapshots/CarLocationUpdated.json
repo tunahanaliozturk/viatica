@@ -1,0 +1,43 @@
+{
+  "locationId": "5975fd8c-5f35-75e9-ab86-c8c885d30d56",
+  "partnerId": "8bac7837-2401-4e81-547f-4a92c026eda6",
+  "listingVersion": 7,
+  "name": "Name",
+  "address": {
+    "line1": "Line1",
+    "city": "City",
+    "region": "Region",
+    "postalCode": "PostalCode",
+    "countryCode": "CountryCode"
+  },
+  "location": {
+    "latitude": 38.7223,
+    "longitude": 38.7223
+  },
+  "airportCode": "AirportCode",
+  "openingHours": [
+    {
+      "day": "Sunday",
+      "opens": "15:00:00",
+      "closes": "15:00:00"
+    }
+  ],
+  "cancellationPolicy": {
+    "freeUntilHoursBeforeStart": 2,
+    "penaltyAfter": "FirstUnit"
+  },
+  "categories": [
+    {
+      "categoryId": "13a0b810-e9b3-9f87-3277-a28d58787b08",
+      "acriss": "Acriss",
+      "name": "Name",
+      "seats": 2,
+      "transmission": "Manual",
+      "fuel": "Petrol",
+      "bags": 2,
+      "minimumDriverAge": 2,
+      "imageUrl": "https://cdn.viatica.local/imageurl"
+    }
+  ],
+  "updatedAt": "2026-12-01T09:30:00+00:00"
+}
