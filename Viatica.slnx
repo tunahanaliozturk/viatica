@@ -38,6 +38,7 @@
   </Folder>
   <Folder Name="/src/Simulators/">
     <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
+    <Project Path="src/Simulators/Viatica.PspSim/Viatica.PspSim.csproj" />
   </Folder>
   <Folder Name="/tests/Services/Flights/">
     <Project Path="tests/Services/Flights/Viatica.Flights.IntegrationTests/Viatica.Flights.IntegrationTests.csproj" />
@@ -50,6 +51,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/Viatica.AirlineSim.IntegrationTests/Viatica.AirlineSim.IntegrationTests.csproj" />
     <Project Path="tests/Viatica.AirlineSim.UnitTests/Viatica.AirlineSim.UnitTests.csproj" />
+    <Project Path="tests/Viatica.PspSim.IntegrationTests/Viatica.PspSim.IntegrationTests.csproj" />
+    <Project Path="tests/Viatica.PspSim.UnitTests/Viatica.PspSim.UnitTests.csproj" />
     <Project Path="tests/Viatica.ArchitectureTests/Viatica.ArchitectureTests.csproj" />
     <Project Path="tests/Viatica.Contracts.UnitTests/Viatica.Contracts.UnitTests.csproj" />
     <Project Path="tests/Viatica.Kernel.IntegrationTests/Viatica.Kernel.IntegrationTests.csproj" />
