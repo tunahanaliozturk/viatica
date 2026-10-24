@@ -49,6 +49,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 builder.Services.AddValkeyRepeatabilityStore();
 
+builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddDbContextCheck<StaysDbContext>(tags: ["ready"]);
 
 builder.Services.AddOpenTelemetry()
@@ -83,6 +84,7 @@ app.UseViaticaApi();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = static _ => false }).WithoutApiVersion().AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = static check => check.Tags.Contains("ready") }).WithoutApiVersion().AllowAnonymous();
 
+app.MapOpenApi().WithoutApiVersion().AllowAnonymous();
 app.MapPropertyEndpoints();
 app.MapRoomTypeEndpoints();
 app.MapNightAndQuoteEndpoints();

@@ -378,4 +378,15 @@ public sealed class CatalogueTests(StaysFixture stays) : IClassFixture<StaysFixt
         (await Host.SendAsync(HttpMethod.Get, "/health/live", withVersion: false)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await Host.SendAsync(HttpMethod.Get, "/health/ready", withVersion: false)).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task The_openapi_document_answers_without_a_version_or_a_token_and_describes_the_routes()
+    {
+        using HttpResponseMessage response = await Host.SendAsync(HttpMethod.Get, "/openapi/v1.json", withVersion: false);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement paths = (await StaysHost.JsonAsync(response)).GetProperty("paths");
+        paths.TryGetProperty("/properties/{propertyId}", out _).ShouldBeTrue();
+        paths.TryGetProperty("/properties/{propertyId}/room-types/{roomTypeId}/quotes", out _).ShouldBeTrue();
+    }
 }
