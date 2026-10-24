@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
   transaction scoped advisory lock per key before inserting (ADR 0007, #42).
 - `viatica.outbox.age` is kept per relay and tagged with the context's full name and the topic, so two relays of one
   context no longer overwrite each other and one stopping no longer removes the other's gauge (#53).
+- Repeatable requests: a running request holds its claim on a 30 second lease that it renews until it finishes, and
+  every claim has an owner so a stale completion or release cannot touch a newer claim. A crashed request frees its
+  id after one lease instead of after the window. `IRepeatabilityStore` gains `RenewAsync` and an owner overload of
+  `ReleaseAsync` as default interface methods; `RepeatableResponse` gains an optional `Owner` (#45).
 
 ### Added
 

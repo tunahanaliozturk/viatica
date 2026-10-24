@@ -308,6 +308,14 @@ Ids are scoped to the caller (the token's `sub`): one user's id never reaches an
 Domain refusals (`409 RefundWindowClosed`) are kept and replayed like any answer. A 5xx is not kept, and an
 unexpected exception releases the id, so the client can retry a failure. (`RepeatabilityTests`)
 
+A running request holds its claim on a lease (`Viatica:Api:RepeatabilityLease`, 30 seconds) and renews it every third
+of that until it finishes, so a handler that runs for minutes is never joined by a copy
+(`RepeatabilityLeaseTests.A_handler_that_runs_past_its_lease_keeps_its_claim_so_a_copy_is_not_run_beside_it`; it fails
+without the renewal). A process that dies stops renewing and its id is free after one lease. Every claim carries an
+owner token, and completing, renewing or releasing is checked against it in one step, so a request that did lose its
+claim cannot overwrite or delete the next one (`RepeatabilityStoreTests`, and `ValkeyRepeatabilityStoreTests` for the
+Lua scripts).
+
 The first request claims the id atomically before it runs, so of any number of identical requests arriving at
 once exactly one runs. (`RepeatabilityTests.Of_many_identical_requests_arriving_together_exactly_one_runs` with
 32 concurrent copies; the test fails against a check-then-set store.) The claim is `SET key value NX PX` in Valkey
@@ -391,6 +399,7 @@ endpoint specific go after it.
 | `Viatica:Api:SupportedApiVersions` | none, required | The `api-version` values this service answers |
 | `Viatica:Api:SkipTokenKey` | none, required | Base64 of at least 32 random bytes. Every instance shares it; rotating it ends paging sessions in flight |
 | `Viatica:Api:RepeatabilityWindow` | `1.00:00:00` | How long a `Repeatability-Request-ID` is remembered |
+| `Viatica:Api:RepeatabilityLease` | `00:00:30` | How long the claim of a running request lives between renewals |
 
 A missing or short skiptoken key stops the host at start-up rather than failing the first paged request.
 (`ErrorEnvelopeTests.The_host_refuses_to_start_without_a_skiptoken_key`)

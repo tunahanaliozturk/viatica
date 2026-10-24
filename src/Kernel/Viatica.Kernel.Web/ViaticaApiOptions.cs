@@ -23,6 +23,13 @@ public sealed class ViaticaApiOptions
     /// </summary>
     public TimeSpan RepeatabilityWindow { get; set; } = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// How long the claim of a running repeatable request lives without being renewed. A request that is still
+    /// running renews it every third of this, so the claim outlives any handler; a process that dies stops renewing,
+    /// and its id is free again after this long instead of after the whole window.
+    /// </summary>
+    public TimeSpan RepeatabilityLease { get; set; } = TimeSpan.FromSeconds(30);
+
     internal byte[] SkipTokenKeyBytes() => Convert.FromBase64String(SkipTokenKey!);
 
     internal IEnumerable<string> Validate()
@@ -49,6 +56,11 @@ public sealed class ViaticaApiOptions
         if (RepeatabilityWindow <= TimeSpan.Zero)
         {
             yield return "Viatica:Api:RepeatabilityWindow must be positive.";
+        }
+
+        if (RepeatabilityLease <= TimeSpan.Zero)
+        {
+            yield return "Viatica:Api:RepeatabilityLease must be positive.";
         }
     }
 }

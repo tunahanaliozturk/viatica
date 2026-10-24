@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moongazing.OrionGuard.DependencyInjection;
 using Relevox;
 using Viatica.Kernel.Querying;
@@ -32,6 +33,12 @@ public sealed class TestApi : IAsyncLifetime
 
     public Counters Counters { get; } = new();
 
+    /// <summary>
+    /// The host's clock. It stands still until a test moves it, so a test can say how long a handler ran without
+    /// waiting that long. Repeatability tests send a <c>First-Sent</c> read from it.
+    /// </summary>
+    public FakeTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
+
     public IServiceProvider Services => app!.Services;
 
     public async ValueTask InitializeAsync()
@@ -42,6 +49,8 @@ public sealed class TestApi : IAsyncLifetime
         builder.Configuration["Viatica:Api:SkipTokenKey"] = Keys.SkipTokenBase64;
         builder.Configuration["Viatica:Api:SupportedApiVersions:0"] = Version;
 
+        builder.Services.AddSingleton<TimeProvider>(Clock);
+        builder.Services.AddSingleton<IRepeatabilityStore>(sp => new CountingStore(new InMemoryRepeatabilityStore(Clock), Counters));
         builder.AddViaticaApi();
         builder.Services.AddSingleton(Counters);
         builder.Services.AddValidator<CreateTrip, CreateTripValidator>();
@@ -159,9 +168,31 @@ public sealed class Counters
     public int Flaky;
     public int Slow;
     public int Racy;
+    public int Renewals;
 #pragma warning restore CA1051
 
     public TaskCompletionSource SlowGate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+/// <summary>The in-memory store, counting how often a running request renewed its claim.</summary>
+internal sealed class CountingStore(IRepeatabilityStore inner, Counters counters) : IRepeatabilityStore
+{
+    public ValueTask<RepeatableResponse?> TryClaimAsync(string key, RepeatableResponse claim, TimeSpan timeToLive, CancellationToken cancellationToken) =>
+        inner.TryClaimAsync(key, claim, timeToLive, cancellationToken);
+
+    public ValueTask CompleteAsync(string key, RepeatableResponse response, TimeSpan timeToLive, CancellationToken cancellationToken) =>
+        inner.CompleteAsync(key, response, timeToLive, cancellationToken);
+
+    public ValueTask ReleaseAsync(string key, CancellationToken cancellationToken) => inner.ReleaseAsync(key, cancellationToken);
+
+    public ValueTask ReleaseAsync(string key, string owner, CancellationToken cancellationToken) => inner.ReleaseAsync(key, owner, cancellationToken);
+
+    public async ValueTask<bool> RenewAsync(string key, string owner, TimeSpan timeToLive, CancellationToken cancellationToken)
+    {
+        bool renewed = await inner.RenewAsync(key, owner, timeToLive, cancellationToken);
+        Interlocked.Increment(ref counters.Renewals);
+        return renewed;
+    }
 }
 
 public sealed record StaySummary(int Id, string City, Money FromPrice);

@@ -3,15 +3,21 @@ using System.Collections.Concurrent;
 namespace Viatica.Kernel.Web;
 
 /// <summary>A response kept for replay, or, with <see cref="Completed"/> false, the claim of a request still running.</summary>
+/// <param name="Owner">
+/// Who wrote the entry: a token the claiming request makes up and keeps. A store that honours it lets only that
+/// owner complete, renew or release the claim, so a request that outlived its claim cannot touch a newer one.
+/// </param>
 public sealed record RepeatableResponse(
     string Fingerprint,
     bool Completed,
     int StatusCode,
     string? ContentType,
     IReadOnlyDictionary<string, string>? Headers,
-    ReadOnlyMemory<byte> Body)
+    ReadOnlyMemory<byte> Body,
+    string? Owner = null)
 {
-    public static RepeatableResponse Claim(string fingerprint) => new(fingerprint, false, 0, null, null, ReadOnlyMemory<byte>.Empty);
+    public static RepeatableResponse Claim(string fingerprint, string? owner = null) =>
+        new(fingerprint, false, 0, null, null, ReadOnlyMemory<byte>.Empty, owner);
 }
 
 /// <summary>
@@ -31,11 +37,28 @@ public interface IRepeatabilityStore
     /// </summary>
     ValueTask<RepeatableResponse?> TryClaimAsync(string key, RepeatableResponse claim, TimeSpan timeToLive, CancellationToken cancellationToken);
 
-    /// <summary>Replaces the owner's claim with the response to replay.</summary>
+    /// <summary>
+    /// Replaces the owner's claim with the response to replay. When <see cref="RepeatableResponse.Owner"/> is set and
+    /// the key now holds another owner's entry, nothing is written: the claim this response answers lapsed and
+    /// someone else took the id.
+    /// </summary>
     ValueTask CompleteAsync(string key, RepeatableResponse response, TimeSpan timeToLive, CancellationToken cancellationToken);
 
     /// <summary>Drops the owner's claim so a retry can run, after a failure that should not be replayed.</summary>
     ValueTask ReleaseAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Drops the claim only if <paramref name="owner"/> still holds it. The default is the unfenced
+    /// <see cref="ReleaseAsync(string, CancellationToken)"/>, which a store written before owners existed keeps.
+    /// </summary>
+    ValueTask ReleaseAsync(string key, string owner, CancellationToken cancellationToken) => ReleaseAsync(key, cancellationToken);
+
+    /// <summary>
+    /// Pushes the expiry of <paramref name="owner"/>'s claim to <paramref name="timeToLive"/> from now, which is how a
+    /// request that is still running keeps its claim. Returns false when the claim is gone or is another owner's,
+    /// and the request should stop renewing. The default does nothing, for a store whose claims do not expire.
+    /// </summary>
+    ValueTask<bool> RenewAsync(string key, string owner, TimeSpan timeToLive, CancellationToken cancellationToken) => ValueTask.FromResult(true);
 }
 
 /// <summary>
@@ -89,14 +112,58 @@ public sealed class InMemoryRepeatabilityStore(TimeProvider time) : IRepeatabili
 
     public ValueTask CompleteAsync(string key, RepeatableResponse response, TimeSpan timeToLive, CancellationToken cancellationToken)
     {
-        entries[key] = new Entry(response, time.GetUtcNow() + timeToLive);
-        return ValueTask.CompletedTask;
+        DateTimeOffset now = time.GetUtcNow();
+        var replacement = new Entry(response, now + timeToLive);
+        while (true)
+        {
+            entries.TryGetValue(key, out Entry? current);
+            if (current is null || current.ExpiresAt <= now)
+            {
+                // The claim lapsed and nobody took the id: the response is still worth keeping.
+                if (current is null ? entries.TryAdd(key, replacement) : entries.TryUpdate(key, replacement, current))
+                {
+                    return ValueTask.CompletedTask;
+                }
+
+                continue;
+            }
+
+            if (response.Owner is not null && current.Response.Owner != response.Owner)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            if (entries.TryUpdate(key, replacement, current))
+            {
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 
     public ValueTask ReleaseAsync(string key, CancellationToken cancellationToken)
     {
         entries.TryRemove(key, out _);
         return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ReleaseAsync(string key, string owner, CancellationToken cancellationToken)
+    {
+        if (entries.TryGetValue(key, out Entry? current) && current.Response.Owner == owner)
+        {
+            entries.TryRemove(new KeyValuePair<string, Entry>(key, current));
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<bool> RenewAsync(string key, string owner, TimeSpan timeToLive, CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+        bool renewed = entries.TryGetValue(key, out Entry? current)
+            && current.ExpiresAt > now
+            && current.Response.Owner == owner
+            && entries.TryUpdate(key, current with { ExpiresAt = now + timeToLive }, current);
+        return ValueTask.FromResult(renewed);
     }
 
     private sealed record Entry(RepeatableResponse Response, DateTimeOffset ExpiresAt);

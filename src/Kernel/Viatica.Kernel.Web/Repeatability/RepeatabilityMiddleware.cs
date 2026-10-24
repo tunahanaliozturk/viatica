@@ -42,9 +42,17 @@ public static class RepeatabilityEndpointExtensions
 /// different request is a client bug and is refused rather than answered with the wrong response.
 /// </para>
 /// <para>
-/// <c>Repeatability-First-Sent</c> is what makes forgetting safe. Entries expire at first-sent plus the window,
-/// and a request whose first-sent is already outside the window is refused, so a retry that arrives after the
-/// entry is gone cannot run a second time.
+/// <c>Repeatability-First-Sent</c> is what makes forgetting safe. Completed responses are kept until first-sent
+/// plus the window, and a request whose first-sent is already outside the window is refused, so a retry that
+/// arrives after the entry is gone cannot run a second time.
+/// </para>
+/// <para>
+/// A running request holds its claim on a short lease that it renews until it finishes, instead of for the rest of
+/// the window. A handler that runs longer than the window, or a store clock that disagrees with this instance's,
+/// therefore cannot let a copy claim the id while the original still runs; a process that dies stops renewing and
+/// frees its id after one lease, not after a day of 409s. Every claim carries an owner token and the store
+/// completes, renews and releases only for that owner, so a request that did lose its claim cannot overwrite or
+/// delete the next one.
 /// </para>
 /// <para>
 /// A 5xx or an exception other than <see cref="ApiErrorException"/> releases the claim: the client should be able
@@ -66,6 +74,7 @@ internal sealed class RepeatabilityMiddleware(
         [HeaderNames.Location, HeaderNames.ETag, HeaderNames.ContentLocation, Operations.OperationLocationHeader];
 
     private readonly TimeSpan window = options.Value.RepeatabilityWindow;
+    private readonly TimeSpan lease = options.Value.RepeatabilityLease;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -102,9 +111,9 @@ internal sealed class RepeatabilityMiddleware(
 
         string key = Key(context.User, requestId);
         string fingerprint = await Fingerprint(context.Request);
-        TimeSpan timeToLive = firstSent + window - now;
+        string owner = Guid.NewGuid().ToString("N");
 
-        RepeatableResponse? existing = await store.TryClaimAsync(key, RepeatableResponse.Claim(fingerprint), timeToLive, context.RequestAborted);
+        RepeatableResponse? existing = await store.TryClaimAsync(key, RepeatableResponse.Claim(fingerprint, owner), lease, context.RequestAborted);
         if (existing is not null)
         {
             await Answer(context, existing, fingerprint);
@@ -114,6 +123,8 @@ internal sealed class RepeatabilityMiddleware(
         Stream original = context.Response.Body;
         using var buffer = new MemoryStream();
         context.Response.Body = buffer;
+        using var stopRenewing = new CancellationTokenSource();
+        Task renewing = KeepClaimAsync(key, owner, stopRenewing.Token);
         try
         {
             try
@@ -130,15 +141,19 @@ internal sealed class RepeatabilityMiddleware(
         catch
         {
             context.Response.Body = original;
-            await store.ReleaseAsync(key, CancellationToken.None);
+            await stopRenewing.CancelAsync();
+            await renewing;
+            await store.ReleaseAsync(key, owner, CancellationToken.None);
             throw;
         }
 
+        await stopRenewing.CancelAsync();
+        await renewing;
         context.Response.Body = original;
         HttpResponse response = context.Response;
         if (response.StatusCode >= 500)
         {
-            await store.ReleaseAsync(key, CancellationToken.None);
+            await store.ReleaseAsync(key, owner, CancellationToken.None);
         }
         else
         {
@@ -151,13 +166,33 @@ internal sealed class RepeatabilityMiddleware(
                 }
             }
 
-            var completed = new RepeatableResponse(fingerprint, true, response.StatusCode, response.ContentType, headers, buffer.ToArray());
-            await store.CompleteAsync(key, completed, timeToLive, CancellationToken.None);
+            var completed = new RepeatableResponse(fingerprint, true, response.StatusCode, response.ContentType, headers, buffer.ToArray(), owner);
+
+            // Measured again: the handler may have run for a good part of the window. A response is kept at least one
+            // clock skew past it, so a copy that this instance's clock still accepts is replayed, not run again.
+            TimeSpan keep = firstSent + window - time.GetUtcNow();
+            await store.CompleteAsync(key, completed, keep > AllowedClockSkew ? keep : AllowedClockSkew, CancellationToken.None);
             response.Headers[ResultHeader] = "accepted";
         }
 
         buffer.Position = 0;
         await buffer.CopyToAsync(original, context.RequestAborted);
+    }
+
+    // Renews the claim until told to stop. A store that fails here is also failing the request's own calls, which
+    // surface the error; the claim just lapses after one lease.
+    private async Task KeepClaimAsync(string key, string owner, CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(lease / 3, time);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop) && await store.RenewAsync(key, owner, lease, stop))
+            {
+            }
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static Task Answer(HttpContext context, RepeatableResponse existing, string fingerprint)
