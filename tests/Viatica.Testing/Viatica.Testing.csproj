@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    What every container-backed test suite shares: one Postgres and one Kafka per test assembly, a fresh database
+    What every container-backed test suite shares: one Postgres, Kafka and Valkey per test assembly, a fresh database
     per test class, and a probe that reads what a service put on a topic. A library, not a test project.
   -->
 
@@ -15,6 +15,7 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Testcontainers.Kafka" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
     <PackageReference Include="xunit.v3.extensibility.core" />
   </ItemGroup>
 

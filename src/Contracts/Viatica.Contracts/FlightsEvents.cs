@@ -12,6 +12,9 @@ public enum FlightRejectionReason
     PriceChanged,
     SoldOut,
     SupplierUnavailable,
+
+    /// <summary>The passenger details were unreadable, did not fit the offer, or the airline refused them.</summary>
+    InvalidPassengers,
 }
 
 public sealed record FlightOrderCreated(
