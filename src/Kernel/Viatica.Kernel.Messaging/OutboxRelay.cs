@@ -36,7 +36,8 @@ public sealed class OutboxRelay<TDbContext>(
     ILogger<OutboxRelay<TDbContext>> logger) : BackgroundService
     where TDbContext : DbContext
 {
-    private static readonly string Outbox = typeof(TDbContext).Name;
+    // The full name, so two context types called alike in different namespaces stay apart.
+    private static readonly string Outbox = typeof(TDbContext).FullName!;
 
     private string? _lockOldestPerKey;
 
@@ -70,7 +71,7 @@ public sealed class OutboxRelay<TDbContext>(
         }
         finally
         {
-            MessagingTelemetry.ForgetOutbox(Outbox);
+            MessagingTelemetry.ForgetOutbox(this);
         }
     }
 
@@ -82,7 +83,9 @@ public sealed class OutboxRelay<TDbContext>(
         DbSet<OutboxMessage> outbox = db.Set<OutboxMessage>();
 
         MessagingTelemetry.ReportOldestPending(
+            this,
             Outbox,
+            options.Topic,
             await outbox.OrderBy(static m => m.Sequence).Select(static m => (DateTimeOffset?)m.OccurredAt).FirstOrDefaultAsync(cancellationToken));
 
         await using IDbContextTransaction transaction = await db.Database.BeginTransactionAsync(cancellationToken);

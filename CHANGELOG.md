@@ -10,6 +10,8 @@ All notable changes to this project are documented here. The format follows
 
 - Outbox: events of one key could reach Kafka out of order when two transactions overlapped. Writers now take a
   transaction scoped advisory lock per key before inserting (ADR 0007, #42).
+- `viatica.outbox.age` is kept per relay and tagged with the context's full name and the topic, so two relays of one
+  context no longer overwrite each other and one stopping no longer removes the other's gauge (#53).
 
 ### Added
 

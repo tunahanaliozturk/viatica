@@ -192,7 +192,7 @@ default: older events are gone from the replay. If the rebuild fails, the old in
 
 ### Outbox backlog
 
-**Shows up as** `viatica.outbox.age` (seconds, tagged `outbox` with the DbContext name) above 30, the limit
+**Shows up as** `viatica.outbox.age` (seconds, tagged `outbox` with the DbContext type's full name and `messaging.destination.name` with the topic) above 30, the limit
 `docs/design.md` sets after a quiet run. Logs carry `Producing outbox row ... failed on attempt N` (warning) or
 `Outbox relay round for ... failed` (error).
 

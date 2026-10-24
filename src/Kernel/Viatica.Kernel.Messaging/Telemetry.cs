@@ -16,9 +16,10 @@ public static class MessagingTelemetry
 
     private static readonly Meter Meter = new(Name);
 
-    // One entry per running relay, keyed by DbContext name. The gauge reads whatever the relay measured last, so
-    // collecting metrics never runs a query of its own.
-    private static readonly ConcurrentDictionary<string, DateTimeOffset?> OldestPending = new(StringComparer.Ordinal);
+    // One entry per running relay, keyed by the relay itself: two relays of one DbContext type (one per topic, or two
+    // hosts in a test) must not share an entry, and one stopping must not remove the other's. The gauge reads whatever
+    // the relay measured last, so collecting metrics never runs a query of its own.
+    private static readonly ConcurrentDictionary<object, (string Outbox, string Topic, DateTimeOffset? Oldest)> OldestPending = new(ReferenceEqualityComparer.Instance);
 
     internal static readonly Counter<long> Published = Meter.CreateCounter<long>(
         "viatica.messaging.published", "{message}", "Outbox rows produced to Kafka and acknowledged by every in-sync replica.");
@@ -39,17 +40,24 @@ public static class MessagingTelemetry
         "s",
         "Age of the oldest row still waiting in an outbox; zero when the outbox is empty.");
 
-    internal static void ReportOldestPending(string outbox, DateTimeOffset? oldest) => OldestPending[outbox] = oldest;
+    internal static void ReportOldestPending(object relay, string outbox, string topic, DateTimeOffset? oldest) =>
+        OldestPending[relay] = (outbox, topic, oldest);
 
-    internal static void ForgetOutbox(string outbox) => OldestPending.TryRemove(outbox, out _);
+    internal static void ForgetOutbox(object relay) => OldestPending.TryRemove(relay, out _);
 
     private static IEnumerable<Measurement<double>> ObserveOutboxAge()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        foreach ((string outbox, DateTimeOffset? oldest) in OldestPending)
+
+        // Relays that share a context type and a topic (two hosts in one process) are one series; the worst age wins.
+        foreach (IGrouping<(string Outbox, string Topic), (string Outbox, string Topic, DateTimeOffset? Oldest)> series in
+                 OldestPending.Values.GroupBy(static r => (r.Outbox, r.Topic)))
         {
-            double age = oldest is { } at ? Math.Max(0, (now - at).TotalSeconds) : 0;
-            yield return new Measurement<double>(age, new KeyValuePair<string, object?>("outbox", outbox));
+            double age = series.Max(r => r.Oldest is { } at ? Math.Max(0, (now - at).TotalSeconds) : 0);
+            yield return new Measurement<double>(
+                age,
+                new KeyValuePair<string, object?>("outbox", series.Key.Outbox),
+                new KeyValuePair<string, object?>("messaging.destination.name", series.Key.Topic));
         }
     }
 
