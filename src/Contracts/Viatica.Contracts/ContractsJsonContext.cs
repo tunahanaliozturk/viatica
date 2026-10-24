@@ -58,4 +58,5 @@ namespace Viatica.Contracts;
 [JsonSerializable(typeof(PaymentCaptured))]
 [JsonSerializable(typeof(PaymentVoided))]
 [JsonSerializable(typeof(PaymentRefunded))]
+[JsonSerializable(typeof(PaymentOperationRefused))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
