@@ -2,10 +2,8 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 
@@ -29,23 +27,19 @@ public static class RepeatabilityEndpointExtensions
     }
 }
 
-/// <summary>A response kept for replay, or the marker that the first request is still running.</summary>
-internal sealed record RepeatableResponse(
-    string Fingerprint,
-    bool Completed,
-    int StatusCode,
-    string? ContentType,
-    Dictionary<string, string>? Headers,
-    byte[]? Body);
-
 /// <summary>
 /// Repeatable requests as the Azure REST API Guidelines describe them (after the OASIS Repeatable Requests spec).
 /// </summary>
 /// <remarks>
 /// <para>
-/// The request id is scoped to the caller (the token's <c>sub</c>), so one user can never be served another
-/// user's stored response by guessing an id. A fingerprint of method, path, query and body is stored with it: the
-/// same id on a different request is a client bug and is refused rather than answered with the wrong response.
+/// The first request atomically claims its id in the <see cref="IRepeatabilityStore"/>, runs, and replaces the
+/// claim with its response. A copy arriving while it runs finds the claim and gets <c>409</c>; a copy arriving
+/// after it finds the response and gets it replayed. Only the claimant ever runs the handler.
+/// </para>
+/// <para>
+/// The id is scoped to the caller (the token's <c>sub</c>), so one user can never be served another user's stored
+/// response by guessing an id. A fingerprint of method, path, query and body is stored with it: the same id on a
+/// different request is a client bug and is refused rather than answered with the wrong response.
 /// </para>
 /// <para>
 /// <c>Repeatability-First-Sent</c> is what makes forgetting safe. Entries expire at first-sent plus the window,
@@ -53,12 +47,12 @@ internal sealed record RepeatableResponse(
 /// entry is gone cannot run a second time.
 /// </para>
 /// <para>
-/// 5xx responses are not kept: the client should be able to retry a failure. Exceptions other than
-/// <see cref="ApiErrorException"/> drop the in-progress marker for the same reason.
+/// A 5xx or an exception other than <see cref="ApiErrorException"/> releases the claim: the client should be able
+/// to retry a failure, and a claim stuck until expiry would turn every retry into a 409.
 /// </para>
 /// </remarks>
 internal sealed class RepeatabilityMiddleware(
-    RequestDelegate next, IDistributedCache cache, TimeProvider time, IOptions<ViaticaApiOptions> options)
+    RequestDelegate next, IRepeatabilityStore store, TimeProvider time, IOptions<ViaticaApiOptions> options)
 {
     public const string RequestIdHeader = "Repeatability-Request-ID";
     public const string FirstSentHeader = "Repeatability-First-Sent";
@@ -106,36 +100,16 @@ internal sealed class RepeatabilityMiddleware(
             return;
         }
 
-        string key = CacheKey(context.User, requestId);
+        string key = Key(context.User, requestId);
         string fingerprint = await Fingerprint(context.Request);
-        var expiry = new DistributedCacheEntryOptions { AbsoluteExpiration = firstSent + window };
+        TimeSpan timeToLive = firstSent + window - now;
 
-        byte[]? existing = await cache.GetAsync(key, context.RequestAborted);
+        RepeatableResponse? existing = await store.TryClaimAsync(key, RepeatableResponse.Claim(fingerprint), timeToLive, context.RequestAborted);
         if (existing is not null)
         {
-            RepeatableResponse stored = JsonSerializer.Deserialize(existing, KernelJsonContext.Default.RepeatableResponse)!;
-            if (!string.Equals(stored.Fingerprint, fingerprint, StringComparison.Ordinal))
-            {
-                await Reject(context, StatusCodes.Status400BadRequest, ApiErrorCode.InvalidRequest,
-                    "This Repeatability-Request-ID was already used for a different request.", RequestIdHeader);
-            }
-            else if (!stored.Completed)
-            {
-                await Reject(context, StatusCodes.Status409Conflict, ApiErrorCode.Conflict,
-                    "A request with this Repeatability-Request-ID is still running. Retry in a moment.", RequestIdHeader);
-            }
-            else
-            {
-                await Replay(context, stored);
-            }
-
+            await Answer(context, existing, fingerprint);
             return;
         }
-
-        // ponytail: get-then-set on IDistributedCache leaves a window of a few milliseconds where two identical
-        // requests arriving together both run. Closing it needs SET NX through a Redis-specific seam; until then
-        // the operations behind this (refunds, bulk updates) must still be safe to apply twice at the domain level.
-        await cache.SetAsync(key, Serialize(new RepeatableResponse(fingerprint, false, 0, null, null, null)), expiry, context.RequestAborted);
 
         Stream original = context.Response.Body;
         using var buffer = new MemoryStream();
@@ -156,7 +130,7 @@ internal sealed class RepeatabilityMiddleware(
         catch
         {
             context.Response.Body = original;
-            await cache.RemoveAsync(key, CancellationToken.None);
+            await store.ReleaseAsync(key, CancellationToken.None);
             throw;
         }
 
@@ -164,7 +138,7 @@ internal sealed class RepeatabilityMiddleware(
         HttpResponse response = context.Response;
         if (response.StatusCode >= 500)
         {
-            await cache.RemoveAsync(key, CancellationToken.None);
+            await store.ReleaseAsync(key, CancellationToken.None);
         }
         else
         {
@@ -178,12 +152,26 @@ internal sealed class RepeatabilityMiddleware(
             }
 
             var completed = new RepeatableResponse(fingerprint, true, response.StatusCode, response.ContentType, headers, buffer.ToArray());
-            await cache.SetAsync(key, Serialize(completed), expiry, CancellationToken.None);
+            await store.CompleteAsync(key, completed, timeToLive, CancellationToken.None);
             response.Headers[ResultHeader] = "accepted";
         }
 
         buffer.Position = 0;
         await buffer.CopyToAsync(original, context.RequestAborted);
+    }
+
+    private static Task Answer(HttpContext context, RepeatableResponse existing, string fingerprint)
+    {
+        if (!string.Equals(existing.Fingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            return Reject(context, StatusCodes.Status400BadRequest, ApiErrorCode.InvalidRequest,
+                "This Repeatability-Request-ID was already used for a different request.", RequestIdHeader);
+        }
+
+        return existing.Completed
+            ? Replay(context, existing)
+            : Reject(context, StatusCodes.Status409Conflict, ApiErrorCode.Conflict,
+                "A request with this Repeatability-Request-ID is still running. Retry in a moment.", RequestIdHeader);
     }
 
     private static async Task Replay(HttpContext context, RepeatableResponse stored)
@@ -195,15 +183,15 @@ internal sealed class RepeatabilityMiddleware(
             response.ContentType = stored.ContentType;
         }
 
-        foreach (var (name, value) in stored.Headers ?? [])
+        foreach (var (name, value) in stored.Headers ?? new Dictionary<string, string>())
         {
             response.Headers[name] = value;
         }
 
         response.Headers[ResultHeader] = "accepted";
-        if (stored.Body is { Length: > 0 } body)
+        if (!stored.Body.IsEmpty)
         {
-            await response.Body.WriteAsync(body, context.RequestAborted);
+            await response.Body.WriteAsync(stored.Body, context.RequestAborted);
         }
     }
 
@@ -213,7 +201,7 @@ internal sealed class RepeatabilityMiddleware(
         return ErrorResponses.WriteAsync(context, status, new ApiError(code, message) { Target = target });
     }
 
-    private static string CacheKey(ClaimsPrincipal user, string requestId)
+    private static string Key(ClaimsPrincipal user, string requestId)
     {
         string caller = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{caller.Length}:{caller}{requestId}"));
@@ -238,7 +226,4 @@ internal sealed class RepeatabilityMiddleware(
         request.Body.Position = 0;
         return Convert.ToHexString(hash.GetHashAndReset());
     }
-
-    private static byte[] Serialize(RepeatableResponse response) =>
-        JsonSerializer.SerializeToUtf8Bytes(response, KernelJsonContext.Default.RepeatableResponse);
 }
