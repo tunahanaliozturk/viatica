@@ -18,12 +18,22 @@
     <Project Path="src/Services/Flights/Viatica.Flights.Domain/Viatica.Flights.Domain.csproj" />
     <Project Path="src/Services/Flights/Viatica.Flights.Infrastructure/Viatica.Flights.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Stays/">
+    <Project Path="src/Services/Stays/Viatica.Stays.Api/Viatica.Stays.Api.csproj" />
+    <Project Path="src/Services/Stays/Viatica.Stays.Application/Viatica.Stays.Application.csproj" />
+    <Project Path="src/Services/Stays/Viatica.Stays.Domain/Viatica.Stays.Domain.csproj" />
+    <Project Path="src/Services/Stays/Viatica.Stays.Infrastructure/Viatica.Stays.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/Simulators/">
     <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
   </Folder>
   <Folder Name="/tests/Services/Flights/">
     <Project Path="tests/Services/Flights/Viatica.Flights.IntegrationTests/Viatica.Flights.IntegrationTests.csproj" />
     <Project Path="tests/Services/Flights/Viatica.Flights.UnitTests/Viatica.Flights.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Services/Stays/">
+    <Project Path="tests/Services/Stays/Viatica.Stays.IntegrationTests/Viatica.Stays.IntegrationTests.csproj" />
+    <Project Path="tests/Services/Stays/Viatica.Stays.UnitTests/Viatica.Stays.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Viatica.AirlineSim.IntegrationTests/Viatica.AirlineSim.IntegrationTests.csproj" />

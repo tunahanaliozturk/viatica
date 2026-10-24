@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Use cases, validators, the narrow IStaysDb and the handlers for Booking's hold requests. EF Core without a
+    provider, Relevox.Contracts without the generator: the host picks both.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="OrionGuard" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Stays.Domain\Viatica.Stays.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Stays.UnitTests" />
+    <InternalsVisibleTo Include="Viatica.Stays.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

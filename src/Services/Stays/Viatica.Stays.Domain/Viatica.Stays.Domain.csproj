@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Properties, room types, nights, holds and quote tokens. Kernel and OrionGuard only; no framework. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Stays.UnitTests" />
+  </ItemGroup>
+
+</Project>
