@@ -303,8 +303,11 @@ Repeatability-First-Sent: Tue, 01 Dec 2026 14:00:00 GMT
 | same id, different method, path, query or body | `400 InvalidRequest` | `rejected` |
 | `Repeatability-First-Sent` older than the window (24 hours by default) | `400 InvalidRequest` | `rejected` |
 | no `Repeatability-Request-ID` | runs normally | none |
+| `Repeatability-Request-ID` from a caller without a subject | `401 Unauthorized` | `rejected` |
 
-Ids are scoped to the caller (the token's `sub`): one user's id never reaches another user's kept response.
+Ids are scoped to the caller (the token's `sub`): one user's id never reaches another user's kept response. A caller
+with no subject has no scope to put an id in, so it is refused instead of sharing one with every other anonymous caller
+(`RepeatabilityTests.An_anonymous_caller_cannot_use_repeatability_so_two_of_them_never_share_a_response`).
 Domain refusals (`409 RefundWindowClosed`) are kept and replayed like any answer. A 5xx is not kept, and an
 unexpected exception releases the id, so the client can retry a failure. (`RepeatabilityTests`)
 

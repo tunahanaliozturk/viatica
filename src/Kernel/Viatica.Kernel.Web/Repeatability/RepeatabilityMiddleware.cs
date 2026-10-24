@@ -38,8 +38,9 @@ public static class RepeatabilityEndpointExtensions
 /// </para>
 /// <para>
 /// The id is scoped to the caller (the token's <c>sub</c>), so one user can never be served another user's stored
-/// response by guessing an id. A fingerprint of method, path, query and body is stored with it: the same id on a
-/// different request is a client bug and is refused rather than answered with the wrong response.
+/// response by guessing an id. A caller without a subject is refused with <c>401</c> rather than given a shared
+/// scope. A fingerprint of method, path, query and body is stored with it: the same id on a different request is a
+/// client bug and is refused rather than answered with the wrong response.
 /// </para>
 /// <para>
 /// <c>Repeatability-First-Sent</c> is what makes forgetting safe. Completed responses are kept until first-sent
@@ -85,6 +86,15 @@ internal sealed class RepeatabilityMiddleware(
             return;
         }
 
+        // Ids are scoped to the caller. An anonymous caller has no scope, so two of them sending the same id would
+        // share a claim and the second would be handed the first one's response.
+        if (Caller(context.User) is not { } caller)
+        {
+            await Reject(context, StatusCodes.Status401Unauthorized, ApiErrorCode.Unauthorized,
+                "Repeatability-Request-ID needs an authenticated caller.", RequestIdHeader);
+            return;
+        }
+
         if (requestId.Length is 0 or > 128 || !requestId.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or ':'))
         {
             await Reject(context, StatusCodes.Status400BadRequest, ApiErrorCode.InvalidRequest,
@@ -109,7 +119,7 @@ internal sealed class RepeatabilityMiddleware(
             return;
         }
 
-        string key = Key(context.User, requestId);
+        string key = Key(caller, requestId);
         string fingerprint = await Fingerprint(context.Request);
         string owner = Guid.NewGuid().ToString("N");
 
@@ -236,9 +246,13 @@ internal sealed class RepeatabilityMiddleware(
         return ErrorResponses.WriteAsync(context, status, new ApiError(code, message) { Target = target });
     }
 
-    private static string Key(ClaimsPrincipal user, string requestId)
+    private static string? Caller(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true
+            ? new[] { user.FindFirst("sub")?.Value, user.FindFirst(ClaimTypes.NameIdentifier)?.Value }.FirstOrDefault(static v => !string.IsNullOrEmpty(v))
+            : null;
+
+    private static string Key(string caller, string requestId)
     {
-        string caller = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{caller.Length}:{caller}{requestId}"));
         return "viatica:repeatability:" + Convert.ToHexString(hash);
     }
