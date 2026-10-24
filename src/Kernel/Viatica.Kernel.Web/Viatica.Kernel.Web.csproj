@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Microsoft REST API Guidelines, implemented once: error envelope, paging, api-version, ETag, repeatability. -->
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Kernel\Viatica.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>
