@@ -12,8 +12,18 @@
     <Project Path="src/Kernel/Viatica.Kernel.Messaging/Viatica.Kernel.Messaging.csproj" />
     <Project Path="src/Kernel/Viatica.Kernel.Web/Viatica.Kernel.Web.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Flights/">
+    <Project Path="src/Services/Flights/Viatica.Flights.Api/Viatica.Flights.Api.csproj" />
+    <Project Path="src/Services/Flights/Viatica.Flights.Application/Viatica.Flights.Application.csproj" />
+    <Project Path="src/Services/Flights/Viatica.Flights.Domain/Viatica.Flights.Domain.csproj" />
+    <Project Path="src/Services/Flights/Viatica.Flights.Infrastructure/Viatica.Flights.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/Simulators/">
     <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
+  </Folder>
+  <Folder Name="/tests/Services/Flights/">
+    <Project Path="tests/Services/Flights/Viatica.Flights.IntegrationTests/Viatica.Flights.IntegrationTests.csproj" />
+    <Project Path="tests/Services/Flights/Viatica.Flights.UnitTests/Viatica.Flights.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Viatica.AirlineSim.IntegrationTests/Viatica.AirlineSim.IntegrationTests.csproj" />

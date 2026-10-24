@@ -17,6 +17,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Viatica.AirlineSim.UnitTests" />
     <InternalsVisibleTo Include="Viatica.AirlineSim.IntegrationTests" />
+    <!-- The Flights integration tests host the sim in process, to stage failures the way a system test would. -->
+    <InternalsVisibleTo Include="Viatica.Flights.IntegrationTests" />
   </ItemGroup>
 
 </Project>

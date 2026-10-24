@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    Domain rules, the validators, the search fan-out with a fake clock, and the airline adapter against a scripted
+    HTTP handler. No containers: everything with a database or a broker is in the integration tests.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Flights\Viatica.Flights.Infrastructure\Viatica.Flights.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

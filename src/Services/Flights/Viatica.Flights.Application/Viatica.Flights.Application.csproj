@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Use cases, the ports to infrastructure (airlines, offer cache, database) and the event handlers. EF Core is
+    allowed here, the provider is not; no ASP.NET Core, Kafka or Redis (tests/Viatica.ArchitectureTests).
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Flights.Domain\Viatica.Flights.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

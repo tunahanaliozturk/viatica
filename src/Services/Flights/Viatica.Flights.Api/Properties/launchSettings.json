@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Viatica.Flights.Api": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:8103",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
