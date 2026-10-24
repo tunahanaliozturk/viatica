@@ -8,6 +8,9 @@ using Viatica.Kernel.Querying;
 
 namespace Viatica.Kernel.Web;
 
+/// <summary>The paging parameters of a request: the page size and, on every page after the first, the position to continue from.</summary>
+public sealed record PageRequest(int Top, IReadOnlyList<string>? After);
+
 /// <summary>A page of a collection: <c>{ "value": [...], "nextLink": "..." }</c>, with no <c>nextLink</c> on the last page.</summary>
 public sealed record PagedResponse<T>(IReadOnlyList<T> Value, string? NextLink);
 
@@ -52,6 +55,43 @@ public static class Paging
         return fields.Parse(filter, orderBy, top, after);
     }
 
+    /// <summary>
+    /// Reads <c>$top</c> and <c>$skiptoken</c> for an endpoint whose rows do not come from an EF Core query, such as
+    /// a search index. The position inside the token is whatever the endpoint gave to
+    /// <see cref="NextLink(HttpContext, IReadOnlyList{string})"/>; a token from another query or another endpoint is
+    /// refused as <c>InvalidSkipToken</c>, exactly as <see cref="BindCollectionQuery{T}"/> does.
+    /// </summary>
+    public static PageRequest BindPageRequest(this HttpContext context, int defaultTop = DefaultTop, int maxTop = MaxTop)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        IQueryCollection query = context.Request.Query;
+        int top = ReadTop(query, defaultTop, maxTop);
+        string? token = Single(query, SkipToken, ApiErrorCode.InvalidSkipToken);
+        if (token is null)
+        {
+            return new PageRequest(top, null);
+        }
+
+        SkipTokenCodec codec = context.RequestServices.GetRequiredService<SkipTokenCodec>();
+        return codec.TryDecode(token, NormalizeQuery(context.Request), out string[] after)
+            ? new PageRequest(top, after)
+            : throw ApiErrorException.Invalid(
+                ApiErrorCode.InvalidSkipToken,
+                "The $skiptoken is not valid for this query. Follow nextLink exactly as returned, or start again without it.",
+                SkipToken);
+    }
+
+    /// <summary>The link to the page after <paramref name="position"/>: this request's URL with a signed <c>$skiptoken</c>.</summary>
+    public static string NextLink(this HttpContext context, IReadOnlyList<string> position)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(position);
+
+        SkipTokenCodec codec = context.RequestServices.GetRequiredService<SkipTokenCodec>();
+        return NextLink(context.Request, codec.Encode(position, NormalizeQuery(context.Request)));
+    }
+
     /// <summary>A <c>200</c> with the page and, when there is more, a <c>nextLink</c> carrying a signed skiptoken.</summary>
     public static Ok<PagedResponse<T>> Page<T>(this HttpContext context, KeysetPage<T> page)
     {
@@ -75,12 +115,12 @@ public static class Paging
     /// <c>$top</c>: absent is the default, above the maximum is clamped (the guidelines say a server may return
     /// fewer items than asked), anything that is not a positive whole number is a 400.
     /// </summary>
-    internal static int ReadTop(IQueryCollection query)
+    internal static int ReadTop(IQueryCollection query, int defaultTop = DefaultTop, int maxTop = MaxTop)
     {
         string? text = Single(query, Top, ApiErrorCode.InvalidRequest);
         if (text is null)
         {
-            return DefaultTop;
+            return defaultTop;
         }
 
         if (text.Length == 0 || text.AsSpan().ContainsAnyExceptInRange('0', '9'))
@@ -89,9 +129,9 @@ public static class Paging
         }
 
         // All digits: a value too large for an int is still just "more than the maximum".
-        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int top) || top > MaxTop)
+        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int top) || top > maxTop)
         {
-            return MaxTop;
+            return maxTop;
         }
 
         return top > 0
