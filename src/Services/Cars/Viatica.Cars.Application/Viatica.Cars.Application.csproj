@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Use cases and integration event handlers. EF Core's relational package is here for ExecuteUpdateAsync and
+    transactions, which are provider neutral; the Npgsql provider stays in Infrastructure.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Cars.Domain\Viatica.Cars.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Cars.UnitTests" />
+    <InternalsVisibleTo Include="Viatica.Cars.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

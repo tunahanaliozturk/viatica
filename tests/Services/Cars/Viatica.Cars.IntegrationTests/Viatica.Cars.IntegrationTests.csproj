@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    The real Cars host on real Postgres, Kafka and Valkey. The claims under test (no overselling under contention,
+    events that leave with the change that caused them) are about those systems, so none is replaced by a fake.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Cars\Viatica.Cars.Api\Viatica.Cars.Api.csproj" />
+    <ProjectReference Include="..\..\..\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>
