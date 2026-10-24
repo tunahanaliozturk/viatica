@@ -74,4 +74,4 @@ internal static class Envelope
 }
 
 /// <summary>An envelope read off Kafka. <see cref="Event"/> is null when this service does not know the type.</summary>
-internal sealed record Incoming(Guid Id, string Type, DateTimeOffset OccurredAt, string? TraceParent, IIntegrationEvent? Event);
+public sealed record Incoming(Guid Id, string Type, DateTimeOffset OccurredAt, string? TraceParent, IIntegrationEvent? Event);

@@ -57,6 +57,14 @@ public sealed class IntegrationEventTypes
         _byType = byType.ToFrozenDictionary();
     }
 
+    /// <summary>
+    /// Reads one Kafka message value. For consumers that keep no relational store, and so cannot use
+    /// <c>AddSubscription</c> with its inbox: the search projection reads batches itself and gets idempotency from
+    /// event versions. Throws <see cref="JsonException"/> for anything malformed, including an envelope version this
+    /// code does not know.
+    /// </summary>
+    public Incoming Read(byte[] value) => Envelope.Read(value, this);
+
     internal (string Type, string Data) Serialize(IIntegrationEvent @event)
     {
         if (!_byType.TryGetValue(@event.GetType(), out var entry))
