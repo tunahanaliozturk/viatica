@@ -84,7 +84,16 @@ public sealed class SubscriptionConsumer<TDbContext> : BackgroundService
                 }
 
                 await ProcessAsync(result, stoppingToken);
-                consumer.StoreOffset(result);
+                try
+                {
+                    consumer.StoreOffset(result);
+                }
+                catch (KafkaException ex) when (ex.Error.Code == ErrorCode.Local_State)
+                {
+                    // A rebalance took the partition away while the message was being handled. The new owner gets
+                    // it again from the last committed offset, and the inbox turns that into a no-op.
+                    _logger.OffsetNotStored(result.Topic, result.Partition.Value, result.Offset.Value);
+                }
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

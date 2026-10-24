@@ -29,6 +29,9 @@ internal static partial class Log
     [LoggerMessage(14, LogLevel.Debug, "{Type} {EventId} already applied by {ConsumerGroup}; skipped")]
     public static partial void Duplicate(this ILogger logger, string type, Guid eventId, string consumerGroup);
 
+    [LoggerMessage(16, LogLevel.Information, "Partition {Topic}/{Partition} was revoked before offset {Offset} could be stored; its next owner redelivers it")]
+    public static partial void OffsetNotStored(this ILogger logger, string topic, int partition, long offset);
+
     [LoggerMessage(15, LogLevel.Error, "Producing to {DeadLetterTopic} failed; the partition waits until it succeeds")]
     public static partial void DeadLetterFailed(this ILogger logger, string deadLetterTopic, Exception exception);
 }
