@@ -74,6 +74,7 @@ public static class EventCatalog
         [typeof(PaymentCaptured)] = Topics.Payments,
         [typeof(PaymentVoided)] = Topics.Payments,
         [typeof(PaymentRefunded)] = Topics.Payments,
+        [typeof(PaymentOperationRefused)] = Topics.Payments,
     }.ToFrozenDictionary();
 
     public static FrozenDictionary<string, Type> TypeByName { get; } =
