@@ -42,6 +42,7 @@ internal sealed record PassengerMix(int Adults, int Children, int Infants)
 {
     public const int MaxSeated = 9;
 
+    [JsonIgnore]
     public int Seats => Adults + Children;
 
     public string? Problem() => this switch
