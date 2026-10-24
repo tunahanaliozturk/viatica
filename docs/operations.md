@@ -156,7 +156,39 @@ To be written with Flights (M3).
 
 ### Projection lag
 
-To be written with Search (M4).
+**Shows up as** `viatica.search.projection.lag` (histogram, seconds: an event's `occurredAt` to the index write that
+carries it) with a p99 above 2 s, the target in `docs/requirements.md`; or `viatica.search.events` stuck while
+Stays or Cars keep publishing. Searches still answer, from older data: a property can look free after it sold out
+(the quote and the hold are authoritative, so a booking is refused, not oversold) or look sold out after a release.
+
+**Confirm** where the time goes:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group search
+curl -s localhost:9200/_cluster/health?pretty; curl -s localhost:9200/_cat/thread_pool/write?v
+```
+
+- `LAG` growing on every partition, OpenSearch healthy: the consumer is slower than the producers. A batch is up to 500
+  events and one `_mget` plus one `_bulk`; a second instance of the service takes half the partitions.
+- `LAG` growing and the log says `The index is unavailable`: OpenSearch is down or rejecting writes (`write` queue
+  rejections, red cluster, disk watermark). The consumer waits with backoff and loses nothing; fix OpenSearch and it
+  catches up on its own.
+- Lag only on one partition: one property is hot (many availability events). Its document is rewritten whole for each
+  batch; look for a producer sending changes one night at a time.
+- `viatica.search.events{outcome="dead_lettered"}` above zero: see "Dead letter queue growth". Search is the one
+  consumer where a replay is always safe: put the message back on `stays.v1` or `cars.v1` and it applies or is dropped
+  by version.
+
+**Recover** a projection that is wrong rather than late (a bug fixed, a mapping changed, an index lost): rebuild it
+from the topics, which does not interrupt searching.
+
+```bash
+docker compose run --rm search-migrate rebuild
+```
+
+It reads `stays.v1` and `cars.v1` from the start into new indices, switches the aliases in one request and deletes the
+old indices (`docs/services/search.md`, "Rebuild"). It is only as complete as Kafka's retention, seven days by
+default: older events are gone from the replay. If the rebuild fails, the old indices are untouched and still live.
 
 ### Outbox backlog
 

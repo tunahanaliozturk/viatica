@@ -38,3 +38,24 @@ time (`CryptographicOperations.FixedTimeEquals`).
 Parsing builds an expression tree, which EF Core then translates (and caches by shape, since every value is a
 parameter). Even the busy case is under 10 µs, well below the cost of the database round trip it precedes, so the
 parser is not a target for optimisation.
+
+# Search benchmarks
+
+How long the stays, cars and autocomplete queries take on a seeded index: 10,000 properties x 3 room types x 365
+nights and 1,000 rental locations x 8 categories x 365 days. The result is
+[search-query.md](search-query.md), written by the harness itself; why the index looks the way it does is ADR 0005.
+
+Machine: the same Intel Core Ultra 7 255H laptop (16 logical cores, 16 GB visible to Docker, Windows 11 24H2), with
+OpenSearch 3.9.0 in a container shaped like compose's: 1 GB heap, one shard, no replica. The load generator runs on
+the same machine, and so did other containers, so the numbers are a laptop's under mild contention.
+
+```bash
+docker run -d --name search-bench -p 19201:9200 -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true \
+  -e DISABLE_INSTALL_DEMO_CONFIG=true -e "action.auto_create_index=-stays,-cars,+*" -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" \
+  opensearchproject/opensearch:3.9.0
+./.dotnet/dotnet.exe run -c Release --project benchmarks/Viatica.Search.Benchmarks -- \
+  --url http://localhost:19201 --properties 10000 --locations 1000 --queries 1000 --out docs/benchmark-results/search-query.md
+```
+
+The harness deletes the `stays` and `cars` indices on the node it is pointed at before it seeds. Without `--url` it
+starts a throwaway node with a 512 MB heap.
