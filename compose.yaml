@@ -309,6 +309,45 @@ services:
       start_period: 15s
       start_interval: 2s
 
+  # --- Cars (port 8102) -----------------------------------------------------------------------------------------
+  # The service and its one-shot migration share one image. The two keys below are public development values, like
+  # every other secret in this file: the bytes 1..32 and 101..132 in base64.
+
+  cars-migrate:
+    image: viatica/cars:dev
+    build:
+      context: .
+      dockerfile: src/Services/Cars/Viatica.Cars.Api/Dockerfile
+    command: ["migrate"]
+    environment: &cars-environment
+      ConnectionStrings__Cars: Host=postgres;Database=cars;Username=cars;Password=cars
+      ConnectionStrings__Valkey: valkey:6379
+      Kafka__BootstrapServers: kafka:9092
+      Viatica__Api__SkipTokenKey: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=
+      Viatica__Quotes__SigningKey: ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4Q=
+      Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+      Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  cars:
+    image: viatica/cars:dev
+    environment: *cars-environment
+    ports: ["8102:8080"]
+    depends_on:
+      cars-migrate: { condition: service_completed_successfully }
+      kafka-init: { condition: service_completed_successfully }
+      valkey: { condition: service_healthy }
+    healthcheck:
+      # The runtime image has no curl or wget, so the app asks itself: `healthcheck` calls /health/ready on 8080.
+      test: ["CMD", "dotnet", "Viatica.Cars.Api.dll", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
 volumes:
   postgres:
   kafka:

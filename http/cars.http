@@ -1,0 +1,226 @@
+### Cars service, port 8102. Works with the REST Client extension for VS Code and with the JetBrains HTTP client.
+###
+### Start the stack first:  docker compose up -d --wait cars keycloak
+### Then run the requests from the top; each one uses what the earlier ones made.
+###
+### Every request carries api-version. Create and replace use PUT with an id you choose, so a retry is the same
+### request: send "If-Match: *" to create, or the ETag you last read to replace that version only.
+
+@host = http://localhost:8102
+@keycloak = http://localhost:8080
+@version = api-version=2026-11-01
+
+# Ids chosen by the client (UUID v7 in real use; these are fixed so the file can be run again).
+@category = 01a16fb5-2222-7000-8000-000000000001
+@lisbon = 01a16fb5-2222-7000-8000-000000000002
+@porto = 01a16fb5-2222-7000-8000-000000000003
+
+### 1. Sign in as the rental partner (partnerId c0000000-0000-4000-8000-000000000002 is in the token).
+# @name login
+POST {{keycloak}}/realms/viatica/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=partner-cars1&password=viatica
+
+@token = {{login.response.body.access_token}}
+
+### 2. The partner's pricing: one flat fee for a one-way rental, a daily surcharge for drivers under 25.
+### Before the first save this answers zeros and no ETag; create with If-Match: *.
+GET {{host}}/cars/partner/settings?{{version}}
+Authorization: Bearer {{token}}
+
+###
+PUT {{host}}/cars/partner/settings?{{version}}
+Authorization: Bearer {{token}}
+If-Match: *
+Content-Type: application/json
+
+{
+  "oneWayFee": { "amount": "25.00", "currency": "EUR" },
+  "youngDriverSurchargePerDay": { "amount": "12.00", "currency": "EUR" }
+}
+
+### 3. A car category. ACRISS is four letters; minimumDriverAge is the youngest driver it can be rented to.
+PUT {{host}}/cars/categories/{{category}}?{{version}}
+Authorization: Bearer {{token}}
+If-Match: *
+Content-Type: application/json
+
+{
+  "acriss": "ECMN",
+  "name": "Economy, manual",
+  "seats": 5,
+  "transmission": "Manual",
+  "fuel": "Petrol",
+  "bags": 2,
+  "minimumDriverAge": 21,
+  "imageUrl": "https://images.example/ecmn.png"
+}
+
+###
+GET {{host}}/cars/categories/{{category}}?{{version}}
+Authorization: Bearer {{token}}
+
+### A category reaches travellers once it is published, and only through the locations of the same partner.
+POST {{host}}/cars/categories/{{category}}/publish?{{version}}
+Authorization: Bearer {{token}}
+
+### 4. Two rental locations. Opening hours are one window per weekday, in whole minutes; a missing day is closed.
+PUT {{host}}/cars/locations/{{lisbon}}?{{version}}
+Authorization: Bearer {{token}}
+If-Match: *
+Content-Type: application/json
+
+{
+  "name": "Lisbon Airport",
+  "address": { "line1": "Aeroporto de Lisboa", "city": "Lisbon", "postalCode": "1700-008", "countryCode": "PT" },
+  "position": { "latitude": 38.7742, "longitude": -9.1342 },
+  "airportCode": "LIS",
+  "openingHours": [
+    { "day": "Monday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Tuesday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Wednesday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Thursday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Friday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Saturday", "opens": "09:00:00", "closes": "13:00:00" }
+  ],
+  "cancellationPolicy": { "freeUntilHoursBeforeStart": 48, "penaltyAfter": "FirstDay" }
+}
+
+###
+PUT {{host}}/cars/locations/{{porto}}?{{version}}
+Authorization: Bearer {{token}}
+If-Match: *
+Content-Type: application/json
+
+{
+  "name": "Porto Airport",
+  "address": { "line1": "Aeroporto Francisco Sa Carneiro", "city": "Porto", "postalCode": "4470-558", "countryCode": "PT" },
+  "position": { "latitude": 41.2481, "longitude": -8.6814 },
+  "airportCode": "OPO",
+  "openingHours": [
+    { "day": "Monday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Tuesday", "opens": "08:00:00", "closes": "18:00:00" },
+    { "day": "Wednesday", "opens": "08:00:00", "closes": "18:00:00" }
+  ],
+  "cancellationPolicy": { "freeUntilHoursBeforeStart": 24, "penaltyAfter": "FullAmount" }
+}
+
+### Read it back: the ETag header is the version to send as If-Match when replacing it.
+GET {{host}}/cars/locations/{{lisbon}}?{{version}}
+Authorization: Bearer {{token}}
+
+### Your own locations, paged with $top and nextLink. Filter on id, name, status, airportCode, city.
+GET {{host}}/cars/locations?{{version}}&$top=10&$filter=status eq 'Draft'&$orderby=name
+Authorization: Bearer {{token}}
+
+### Publishing announces the listing on cars.v1 (CarLocationUpdated) and puts it in search.
+POST {{host}}/cars/locations/{{lisbon}}/publish?{{version}}
+Authorization: Bearer {{token}}
+
+###
+POST {{host}}/cars/locations/{{porto}}/publish?{{version}}
+Authorization: Bearer {{token}}
+
+### 5. Cars and rates: December, five cars a day at 40 EUR, in one request and one transaction.
+### Repeatability-Request-ID makes a retry safe: the same id and body gives the first answer back.
+POST {{host}}/cars/locations/{{lisbon}}/categories/{{category}}/inventory/bulk?{{version}}
+Authorization: Bearer {{token}}
+Repeatability-Request-ID: 6f1c1b0e-6c0a-4c6e-9d6b-3a5f4f1d0001
+Repeatability-First-Sent: Mon, 02 Nov 2026 09:00:00 GMT
+Content-Type: application/json
+
+{
+  "from": "2026-12-01",
+  "to": "2026-12-31",
+  "allotment": 5,
+  "rate": { "amount": "40.00", "currency": "EUR" }
+}
+
+### Weekend rate on one day. The allotment cannot go below what is already sold or held (409 AllotmentBelowCommitments).
+POST {{host}}/cars/locations/{{lisbon}}/categories/{{category}}/inventory/bulk?{{version}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "from": "2026-12-12",
+  "to": "2026-12-12",
+  "allotment": 3,
+  "rate": { "amount": "55.00", "currency": "EUR" }
+}
+
+### The partner's calendar: allotment, sold, held and the rate for each day.
+GET {{host}}/cars/locations/{{lisbon}}/categories/{{category}}/inventory?{{version}}&from=2026-12-07&to=2026-12-14
+Authorization: Bearer {{token}}
+
+### 6. A quote needs no sign-in. Monday 10:00 to Wednesday 10:00 is two rental days. The token pins the price for 15
+### minutes; Booking sends it back with the hold request.
+POST {{host}}/cars/quotes?{{version}}
+Content-Type: application/json
+
+{
+  "locationId": "{{lisbon}}",
+  "categoryId": "{{category}}",
+  "pickUpAt": "2026-12-07T10:00:00+00:00",
+  "dropOffAt": "2026-12-09T10:00:00+00:00",
+  "driverAge": 35
+}
+
+### A young driver pays the partner's daily surcharge (21 to 24 here).
+POST {{host}}/cars/quotes?{{version}}
+Content-Type: application/json
+
+{
+  "locationId": "{{lisbon}}",
+  "categoryId": "{{category}}",
+  "pickUpAt": "2026-12-07T10:00:00+00:00",
+  "dropOffAt": "2026-12-09T10:00:00+00:00",
+  "driverAge": 22
+}
+
+### One way: drop-off at another location of the same partner adds the partner's flat fee.
+POST {{host}}/cars/quotes?{{version}}
+Content-Type: application/json
+
+{
+  "locationId": "{{lisbon}}",
+  "categoryId": "{{category}}",
+  "dropOffLocationId": "{{porto}}",
+  "pickUpAt": "2026-12-07T10:00:00+00:00",
+  "dropOffAt": "2026-12-08T10:00:00+00:00",
+  "driverAge": 35
+}
+
+### A pick-up outside opening hours is refused (400 LocationClosed, target pickUpAt). Sunday has no hours.
+POST {{host}}/cars/quotes?{{version}}
+Content-Type: application/json
+
+{
+  "locationId": "{{lisbon}}",
+  "categoryId": "{{category}}",
+  "pickUpAt": "2026-12-13T10:00:00+00:00",
+  "dropOffAt": "2026-12-14T10:00:00+00:00",
+  "driverAge": 35
+}
+
+### 7. The errors a client meets while editing. Without If-Match the answer is 428; with a stale ETag it is 412.
+PUT {{host}}/cars/categories/{{category}}?{{version}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "acriss": "ECMN", "name": "Economy", "seats": 5, "transmission": "Manual", "fuel": "Petrol", "bags": 2, "minimumDriverAge": 21 }
+
+###
+PUT {{host}}/cars/categories/{{category}}?{{version}}
+Authorization: Bearer {{token}}
+If-Match: "1"
+Content-Type: application/json
+
+{ "acriss": "ECMN", "name": "Economy", "seats": 5, "transmission": "Manual", "fuel": "Petrol", "bags": 2, "minimumDriverAge": 21 }
+
+### Taking a location off sale announces CarLocationUnpublished. Holds already placed are honoured.
+POST {{host}}/cars/locations/{{porto}}/unpublish?{{version}}
+Authorization: Bearer {{token}}
+
+### Holds, commits, releases and cancellations are not HTTP: Booking sends CarHoldRequested, CarHoldCommitRequested,
+### CarHoldReleaseRequested and CarBookingCancelRequested on booking.v1, and Cars answers on cars.v1.

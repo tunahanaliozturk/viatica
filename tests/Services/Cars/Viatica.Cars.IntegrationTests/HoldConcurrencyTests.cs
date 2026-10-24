@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Relevox;
 using Viatica.Cars.Application.Features.Holds;
+using Viatica.Cars.Application.Integration;
 using Viatica.Cars.Domain;
 using Viatica.Contracts;
 using Viatica.Testing;
@@ -58,6 +59,41 @@ public sealed class HoldConcurrencyTests(PostgresFixture postgres, KafkaFixture 
         days.Single().Sold.ShouldBe(0);
         (await host.QueryAsync(db => db.Holds.CountAsync())).ShouldBe(5);
         await host.AssertInventoryIsConsistentAsync(m);
+    }
+
+    [Fact]
+    public async Task Three_hundred_checkouts_racing_for_the_last_ten_cars_of_a_day_produce_exactly_ten_holds()
+    {
+        Marketplace m = await Scenario.ArrangeAsync(host, allotment: 10);
+        string token = await Scenario.TokenAsync(host.Anonymous(), m, Monday, Monday.AddHours(24));
+
+        // Through the same handler the consumer calls, so every contender is answered with an event.
+        using var start = new SemaphoreSlim(0);
+        Task[] contenders =
+        [
+            .. Enumerable.Range(0, 300).Select(_ => Task.Run(async () =>
+            {
+                var request = new CarHoldRequested(Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), token, 35);
+                await start.WaitAsync();
+                await host.AsConsumerAsync(async services =>
+                {
+                    await services.GetRequiredService<CarHoldRequestedHandler>().HandleAsync(request, CancellationToken.None);
+                    return 0;
+                });
+            })),
+        ];
+        start.Release(contenders.Length);
+        await Task.WhenAll(contenders);
+
+        (await host.DaysAsync(m, "2026-12-07", "2026-12-07")).Single().Held.ShouldBe(10);
+        (await host.QueryAsync(db => db.Holds.CountAsync())).ShouldBe(10);
+        await host.AssertInventoryIsConsistentAsync(m);
+
+        // The answers Booking gets: ten holds and two hundred and ninety refusals, nothing lost on the way.
+        IReadOnlyList<ProbedMessage> placed = await host.Probe.WaitForCountAsync(10, static e => e.Type == "CarHoldPlaced");
+        IReadOnlyList<ProbedMessage> rejected = await host.Probe.WaitForCountAsync(290, static e => e.Type == "CarHoldRejected");
+        placed.Count.ShouldBe(10);
+        rejected.ShouldAllBe(static e => e.DataString("reason") == "SoldOut");
     }
 
     [Fact]
