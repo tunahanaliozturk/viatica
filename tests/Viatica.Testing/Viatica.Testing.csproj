@@ -18,4 +18,9 @@
     <PackageReference Include="xunit.v3.extensibility.core" />
   </ItemGroup>
 
+  <!-- TestTokens mints tokens for the hosts that AddViaticaAuth configures. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Web\Viatica.Kernel.Web.csproj" />
+  </ItemGroup>
+
 </Project>

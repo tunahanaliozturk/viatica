@@ -9,6 +9,8 @@
   <ItemGroup>
     <!-- Atomic SET NX for repeatable requests; see ValkeyRepeatabilityStore. -->
     <PackageReference Include="StackExchange.Redis" />
+    <!-- JWT validation every service host shares; see ViaticaAuthentication. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
   </ItemGroup>
 
   <ItemGroup>
