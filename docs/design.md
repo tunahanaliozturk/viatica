@@ -71,7 +71,8 @@ the hold event carries the authoritative total. Payload fields:
   "expiresAt": "2026-11-20T10:15:00Z" }
 ```
 
-Cars use `"kind": "car"` with `locationId`, `categoryId`, `dropOffLocationId`, `pickUpAt`, `dropOffAt`. Each
+Cars use `"kind": "car"` with `locationId`, `categoryId`, `dropOffLocationId`, `pickUpAt`, `dropOffAt` and
+`driverAge`: the price is for one driver, and a hold request for another age is refused as `QuoteInvalid`. Each
 service has its own key; there is no shared quote key.
 
 ## Flight offers
