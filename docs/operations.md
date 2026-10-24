@@ -1,0 +1,165 @@
+# Operations
+
+How to run Viatica on one machine, how to put it back to a clean state, and what to do when something goes
+wrong. The runbooks arrive with the milestones that build the parts they cover.
+
+## Local stack
+
+```bash
+docker compose up -d --wait     # starts everything in compose.yaml and returns once all of it is healthy
+bash deploy/check-stack.sh      # proves each dependency answers, as the compose job in CI does
+```
+
+The first start pulls about 1.9 GB of images (2.4 GB with the optional OpenSearch Dashboards). With the images
+present, `up -d --wait` on empty volumes returned healthy in 63 seconds on the development laptop (16 GB, Docker
+Desktop on WSL 2, 2026-10-24); Keycloak is the slow one.
+
+Every password below is a public development value for a stack bound to localhost. None of them is a secret,
+and none of them may be reused in any other environment.
+
+| Service | Image | Host port | Credentials | What it is for |
+|---|---|---|---|---|
+| `postgres` | `postgres:18.6-alpine` | 5450 | superuser `postgres` / `postgres`; one role per service, password = role name | One database per service: `stays`, `cars`, `flights`, `booking`, `payments`, `airlinesim` |
+| `kafka` | `apache/kafka:4.4.0` | 9094 (host), `kafka:9092` (containers) | none (plaintext) | Integration events between services, KRaft mode, one node |
+| `kafka-init` | `apache/kafka:4.4.0` | none | none | One-shot: creates the topics, then exits 0 |
+| `opensearch` | `opensearchproject/opensearch:3.9.0` | 9200 | none, security plugin disabled | The Search service's read model of stays and cars |
+| `opensearch-dashboards` | `opensearchproject/opensearch-dashboards:3.9.0` | 5601 | none | Optional index browser, only with `--profile dashboards` |
+| `valkey` | `valkey/valkey:8.1.10-alpine` | 6379 | none | Flight offer cache and rate limit counters (Redis protocol) |
+| `keycloak` | `quay.io/keycloak/keycloak:26.8.1` | 8080 | admin console `admin` / `admin`; users below | Identity: realm `viatica`, OIDC for the web app and tokens for the services |
+| `dashboard` | `mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1` | 18888 (UI), 4317 (OTLP gRPC), 4318 (OTLP HTTP) | none | OpenTelemetry sink: traces, metrics and logs from every service |
+
+Images are pinned by digest in `compose.yaml`; the table shows the tags.
+
+Valkey stands in for Redis. Redis 8 is AGPL, which the licence policy in `docs/requirements.md` does not allow,
+and Valkey (BSD) speaks the same protocol, so the services use an ordinary Redis client against it.
+
+### Postgres
+
+Each service has a login role with the same name as its database, owning that database and nothing else. The
+roles are `NOSUPERUSER NOBYPASSRLS`, and `PUBLIC` has no access to any service database, so `stays` cannot even
+connect to `booking`. `deploy/check-stack.sh` tries exactly that for every role.
+
+```text
+Host=localhost;Port=5450;Database=stays;Username=stays;Password=stays          # from the host
+Host=postgres;Database=stays;Username=stays;Password=stays                     # from a container
+```
+
+### Kafka topics
+
+| Topic | Partitions | Dead letters |
+|---|---|---|
+| `stays.v1` | 12 | `stays.v1.dlq` |
+| `cars.v1` | 12 | `cars.v1.dlq` |
+| `flights.v1` | 12 | `flights.v1.dlq` |
+| `booking.v1` | 12 | `booking.v1.dlq` |
+| `payments.v1` | 12 | `payments.v1.dlq` |
+
+Automatic topic creation is off. A topic exists because `deploy/kafka/create-topics.sh` made it, and a producer
+writing to a misspelt name gets an error instead of a new topic nobody reads.
+
+### Keycloak
+
+Realm `viatica`, imported from `deploy/keycloak/viatica-realm.json` on every start. Every user's password is
+`viatica`.
+
+| User | Role | `partnerId` claim |
+|---|---|---|
+| `traveller1` | `traveller` | |
+| `traveller2` | `traveller` | |
+| `partner-stays1` | `partner` | `c0000000-0000-4000-8000-000000000001` |
+| `partner-cars1` | `partner` | `c0000000-0000-4000-8000-000000000002` |
+| `admin1` | `admin` | |
+
+User ids are fixed (`a0000000-0000-4000-8000-00000000000N`), so the `sub` claim, and anything a service stores
+against it, survives a Keycloak restart.
+
+Clients:
+
+- `web`: public, authorization code with PKCE (S256), redirect `http://localhost:5173/*`. No password grant.
+- `viatica-cli`: public, password grant only, for tests and `curl`. It exists because this is a development
+  realm; a production realm would not have it.
+- `stays-api`, `cars-api`, `flights-api`, `search-api`, `booking-api`, `payments-api`: bearer-only, one per
+  service. They hold no secrets and issue nothing; they are the audiences. Tokens issued to `web` and
+  `viatica-cli` carry all six in `aud`, and each service accepts only tokens naming its own.
+
+`partnerId` is a declared user profile attribute that only an administrator can edit. If partners could edit it
+from the account console, one could claim another partner's hotels.
+
+A token from the command line:
+
+```bash
+curl -s http://localhost:8080/realms/viatica/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=viatica-cli -d username=traveller1 -d password=viatica
+```
+
+Brute force protection is on. **Tests must sign in once per user and reuse the token.** Keycloak counts
+password grants for one account that arrive in parallel as an attack and locks the account, and the lock then
+fails every test that uses it.
+
+### Telemetry
+
+Services export OTLP to `http://dashboard:18889` from a container, or to the OpenTelemetry default
+`http://localhost:4317` when run from an IDE. Open <http://localhost:18888> to see traces, metrics and logs.
+
+## Resetting state
+
+| To reset | Run |
+|---|---|
+| Everything | `docker compose down -v && docker compose up -d --wait` |
+| Postgres only (after editing `deploy/postgres/init.sql`) | `docker compose rm -sf postgres && docker volume rm viatica_postgres && docker compose up -d --wait` |
+| Kafka only (all topics and offsets) | `docker compose rm -sf kafka && docker volume rm viatica_kafka && docker compose up -d --wait` |
+| OpenSearch indices | `docker compose rm -sf opensearch && docker volume rm viatica_opensearch && docker compose up -d --wait` |
+| Keycloak (users, sessions, lockouts) | `docker compose up -d --wait --force-recreate keycloak` |
+| Valkey | `docker compose restart valkey` (it never writes to disk) |
+
+`init.sql` runs only on an empty volume, so editing it does nothing until the Postgres volume is removed.
+Resetting Kafka without Postgres, or the reverse, leaves outbox and inbox tables disagreeing with the broker;
+reset both when in doubt.
+
+## Known limitations of the dev setup
+
+- **No transport security anywhere.** Postgres, Kafka, OpenSearch, Valkey and Keycloak all speak plaintext,
+  OpenSearch has its security plugin disabled, and the Aspire dashboard has no sign-in. Fine on localhost,
+  wrong everywhere else.
+- **One of everything.** One Postgres instance holds every service database, one Kafka broker holds every topic
+  with replication factor 1, one OpenSearch node holds every index. Losing a container loses that dependency;
+  nothing here demonstrates failover.
+- **Keycloak keeps its state inside the container** (`start-dev`, embedded database). Recreating it reimports
+  the realm and drops sessions and lockouts, which is convenient for tests and useless for anything real.
+- **The cluster turns yellow once an index has replicas.** A single OpenSearch node cannot place them, so the
+  health check waits for yellow, not green.
+- **Memory.** The stack takes about 2.9 GB before any service runs. Measured with `docker stats` right after
+  start on the laptop above: OpenSearch 1.6 GB (1 GB of it heap), Keycloak 850 MB, Kafka 410 MB, the Aspire
+  dashboard 66 MB, Postgres 52 MB, Valkey 3 MB. OpenSearch Dashboards adds 280 MB. On a 16 GB machine, stop
+  other container stacks first.
+- **Fixed ports.** 5450, 9094, 9200, 6379, 8080, 18888, 4317 and 4318 must be free. Change the left side of the
+  `ports:` entry if one is taken.
+- **Two containers have no health check.** `kafka-init` runs once and exits; `up --wait` waits for it to exit 0,
+  and services wait on `condition: service_completed_successfully`. The Aspire dashboard image is distroless,
+  with no shell or HTTP client to run a check with; `deploy/check-stack.sh` probes it from outside, and no
+  service should wait on it.
+
+## Runbooks
+
+Each runbook says how the incident shows up (metric, log, alert), how to confirm it, and how to recover without
+losing or duplicating an effect. They are written with the milestone that builds the part they cover.
+
+### Stuck checkout saga
+
+To be written with Booking (M5).
+
+### Airline outage
+
+To be written with Flights (M3).
+
+### Projection lag
+
+To be written with Search (M4).
+
+### Outbox backlog
+
+To be written with the Kernel messaging outbox and relay.
+
+### Dead letter queue growth
+
+To be written with the Kernel messaging inbox and DLQ handling.

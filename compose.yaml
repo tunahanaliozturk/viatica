@@ -1,0 +1,181 @@
+# Viatica's infrastructure on one machine: Postgres, Kafka, OpenSearch, Valkey, Keycloak and the Aspire dashboard.
+# Each service adds itself here in its own milestone.
+#
+#   docker compose up -d --wait          # the stack, healthy
+#   bash deploy/check-stack.sh           # proves each dependency answers (CI runs the same script)
+#
+# Every password, key and token in this file and under deploy/ is a public development value, bound to
+# localhost. None of them is a secret, and none of them belongs in any other environment. docs/operations.md lists
+# them, with the ports and how to reset state.
+#
+# Images are pinned by digest, with the tag beside it for people and for Dependabot. A tag can be moved to a
+# different build; a digest cannot.
+
+name: viatica
+
+services:
+  postgres:
+    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.6-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    # 5450 rather than 5432: a native Postgres on the host would otherwise take the port first.
+    ports: ["5450:5432"]
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/18; mounting the parent lets a later major version
+      # sit beside it instead of failing on a directory it does not recognise.
+      - postgres:/var/lib/postgresql
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # Over TCP on purpose. While init.sql runs, the entrypoint's temporary server listens on the Unix socket
+      # only, so a socket check would pass before the service databases exist.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+      start_interval: 2s
+
+  kafka:
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f # 4.4.0
+    environment:
+      # One node that is both broker and controller (KRaft, no ZooKeeper). The cluster id is fixed so the data
+      # volume survives a container recreate.
+      CLUSTER_ID: dmlhdGljYS1kZXYtMDAwMQ
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Containers reach the broker as kafka:9092; tools and tests on the host use localhost:9094.
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      # Topics are part of the contract and created by kafka-init; a typo must fail, not create a topic.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    ports: ["9094:9094"]
+    volumes:
+      - kafka:/var/lib/kafka/data
+    healthcheck:
+      # The image's own client: it passes only once the broker answers API requests, not when the port opens.
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+      start_interval: 3s
+
+  # One-shot: creates the topics and exits 0. Services that publish or consume wait on it with
+  # `condition: service_completed_successfully`. It has no health check because it does not stay up.
+  kafka-init:
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f # 4.4.0
+    depends_on:
+      kafka: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "/create-topics.sh"]
+    volumes:
+      - ./deploy/kafka/create-topics.sh:/create-topics.sh:ro
+    restart: "no"
+
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0@sha256:adfa61f85025d06b4aeb562e7e74fde7e31c437039c93c3862c17e9acebd6c7c # 3.9.0
+    environment:
+      discovery.type: single-node
+      # 1 GB heap, the cap docs/requirements.md sets for this machine.
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+      # Local development only: no TLS, no users. Anyone who can reach port 9200 can read and write every
+      # index. It is bound to a developer machine; nothing deployed may run this way.
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ports: ["9200:9200"]
+    volumes:
+      - opensearch:/usr/share/opensearch/data
+    healthcheck:
+      # Yellow, not green: one node cannot place replicas, so an index that asks for one keeps the cluster yellow.
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+      start_interval: 3s
+
+  # Optional, because it costs another few hundred MB: docker compose --profile dashboards up -d --wait
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.9.0@sha256:4bdb8ded547ce7f4c379a10261f1b4aad58726900c215be570a7d1fe86f2a7d8 # 3.9.0
+    profiles: ["dashboards"]
+    depends_on:
+      opensearch: { condition: service_healthy }
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports: ["5601:5601"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+      start_interval: 5s
+
+  valkey:
+    image: valkey/valkey:8.1.10-alpine@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507 # 8.1.10-alpine
+    # A cache (flight offers) and rate limit counters, both rebuilt from nothing after a restart, so nothing is
+    # written to disk.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_interval: 1s
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b # 26.8.1
+    # start-dev keeps its state in the container. The realm is imported from deploy/keycloak on every start, so
+    # recreating the container is the reset.
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # Tokens name the address a person uses (localhost), while services fetch keys over the compose network.
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    ports: ["8080:8080"]
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # No curl in the image; bash can speak HTTP to the management port.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 15s
+      timeout: 3s
+      retries: 20
+      start_period: 90s
+      start_interval: 3s
+
+  dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1@sha256:03099004e132a7ca2feb66c5fa24715ffeaaf2fffab6f8b2cda23de3abd3ea45 # 13.6.1
+    # No health check, and not for want of trying: the image is distroless and holds the dashboard binary and
+    # nothing else, no shell, no curl, nothing a check could run. deploy/check-stack.sh sends it an OTLP export
+    # from outside instead. Services must not wait on it either; an OpenTelemetry exporter drops data when the
+    # sink is down rather than failing the service.
+    environment:
+      # Local development only: the dashboard shows every trace and log with no sign-in.
+      DASHBOARD__FRONTEND__AUTHMODE: Unsecured
+      DASHBOARD__OTLP__AUTHMODE: Unsecured
+    # 18888 is the UI. 4317 (gRPC) and 4318 (HTTP) are the standard OTLP ports, so a service run from an IDE
+    # exports with the OpenTelemetry defaults; containers use http://dashboard:18889.
+    ports: ["18888:18888", "4317:18889", "4318:18890"]
+
+volumes:
+  postgres:
+  kafka:
+  opensearch:
