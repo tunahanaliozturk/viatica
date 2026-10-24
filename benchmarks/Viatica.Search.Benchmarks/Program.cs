@@ -252,8 +252,12 @@ internal sealed class Corpus
         var rooms = Enumerable.Range(0, Options.RoomTypes)
             .Select(r => new RoomTypeSnapshot(new Guid(number, 1, (short)r, [0, 0, 0, 0, 0, 0, 0, 2]), $"Room {r}", 2 + r, "1 double", []))
             .ToArray();
-        int stars = 1 + (number % 5);
-        string[] amenities = [.. AmenityPool.OrderBy(_ => _random.Next()).Take(3 + (number % 5))];
+
+        // A hash, not number % 5: a city is number % 100, so any plain modulus of 5 would give every property of a
+        // city the same star rating and the same number of amenities.
+        int hash = (int)(((uint)number * 2654435761u) >> 8);
+        int stars = 1 + (hash % 5);
+        string[] amenities = [.. AmenityPool.OrderBy(_ => _random.Next()).Take(3 + ((hash / 5) % 5))];
 
         yield return new StayListingUpdated(
             id, Guid.NewGuid(), 1, $"Hotel {city.Name} {number:00000}", "A hotel.",

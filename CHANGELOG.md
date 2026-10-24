@@ -38,3 +38,11 @@ All notable changes to this project are documented here. The format follows
   `UPDATE`. Commit, release and cancel are idempotent, and a sweeper expires holds after 15 minutes
   (`docs/services/cars.md`, `http/cars.http`).
 - `cars` and `cars-migrate` in `compose.yaml`, and a Cars probe in `deploy/check-stack.sh`.
+- Search service (`src/Services/Search`, port 8104): stays search by destination text or map box, with availability
+  on every night of the stay, filters, three sorts, facet counts and keyset paging; car search by location or radius
+  with the one way rule; autocomplete over cities, airports and properties. A read model of `stays.v1` and
+  `cars.v1` that drops stale and repeated events by version, reports its lag as a metric, and rebuilds from the
+  topics behind an alias swap with no failed query (`docs/services/search.md`, ADR 0005,
+  `docs/benchmark-results/search-query.md`, `http/search.http`). Also adds `search` and `search-migrate` to compose,
+  `Viatica.Testing.OpenSearchFixture`, `Paging.BindPageRequest` and `IntegrationEventTypes.Read` in the Kernel, and
+  `action.auto_create_index` on the OpenSearch node so a write to a missing alias fails instead of creating an index.
