@@ -37,6 +37,17 @@ public sealed class ServiceSurfaceTests(DefaultFlights flights) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_openapi_document_lists_the_flight_endpoints_without_an_api_version()
+    {
+        using HttpResponseMessage response = await GetAsync("/openapi/v1.json");
+        string text = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        text.ShouldContain("/flights/searches");
+        text.ShouldContain("/flights/offers/{offerId}/price");
+    }
+
+    [Fact]
     public async Task An_admin_reads_an_order_with_its_etag_and_no_passenger_data()
     {
         PlacedOrder order = await scenario.TicketedOrderAsync("ZC");
