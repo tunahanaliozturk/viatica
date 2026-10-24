@@ -2,6 +2,7 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Viatica.Kernel.Benchmarks/Viatica.Kernel.Benchmarks.csproj" />
     <Project Path="benchmarks/Viatica.OutboxSpike/Viatica.OutboxSpike.csproj" />
+    <Project Path="benchmarks/Viatica.Search.Benchmarks/Viatica.Search.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/Contracts/">
@@ -30,6 +31,11 @@
     <Project Path="src/Services/Stays/Viatica.Stays.Domain/Viatica.Stays.Domain.csproj" />
     <Project Path="src/Services/Stays/Viatica.Stays.Infrastructure/Viatica.Stays.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Search/">
+    <Project Path="src/Services/Search/Viatica.Search.Api/Viatica.Search.Api.csproj" />
+    <Project Path="src/Services/Search/Viatica.Search.Application/Viatica.Search.Application.csproj" />
+    <Project Path="src/Services/Search/Viatica.Search.Infrastructure/Viatica.Search.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/Simulators/">
     <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
   </Folder>
@@ -54,6 +60,10 @@
   <Folder Name="/tests/Services/Cars/">
     <Project Path="tests/Services/Cars/Viatica.Cars.IntegrationTests/Viatica.Cars.IntegrationTests.csproj" />
     <Project Path="tests/Services/Cars/Viatica.Cars.UnitTests/Viatica.Cars.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Services/Search/">
+    <Project Path="tests/Services/Search/Viatica.Search.IntegrationTests/Viatica.Search.IntegrationTests.csproj" />
+    <Project Path="tests/Services/Search/Viatica.Search.UnitTests/Viatica.Search.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Viatica.LicenseAudit/Viatica.LicenseAudit.csproj" />

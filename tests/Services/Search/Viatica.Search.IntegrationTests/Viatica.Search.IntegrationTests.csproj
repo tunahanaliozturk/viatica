@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    The real Api host on an in-process server, against real OpenSearch and Kafka in containers. The projection's
+    claims (stale events dropped, a rebuild nobody notices) are about those two systems, so nothing is faked.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Search\Viatica.Search.Api\Viatica.Search.Api.csproj" />
+    <ProjectReference Include="..\..\..\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

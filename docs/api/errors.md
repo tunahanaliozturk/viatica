@@ -124,3 +124,47 @@ Where a code appears in `details[]` of a `400 InvalidRequest`, the `target` is t
 
 Two refusals use shared codes: a concurrent creation of the same id is `409 Conflict`, and a stale `If-Match` is `412
 PreconditionFailed`, as the conventions describe.
+
+## Search
+
+Search is read only and anonymous, so none of these concerns identity. Codes are shared between stay and car search
+where the rule is the same. The query string is read first and every problem found is listed, then the rules below
+are checked. Tests are in `tests/Services/Search`: `RequestTests` (unit), `StaySearchTests`, `CarSearchTests`,
+`AutocompleteTests` and `PagingTests` (integration).
+
+| Status | Code | When | Test |
+|---|---|---|---|
+| 400 | `OneWayNotAllowed` | A car search names a pick-up and a drop-off location of different partners. `target`: `dropOffLocationId` | `CarSearchTests.A_one_way_rental_is_offered_between_locations_of_one_partner_only` |
+| 404 | `LocationNotFound` | `pickUpLocationId` or `dropOffLocationId` names no published location | `CarSearchTests.An_unpublished_location_is_neither_offered_nor_a_valid_pick_up` |
+| 400 | `InvalidSkipToken` | A `nextLink` token used with another query, or altered | `PagingTests.A_skiptoken_used_with_another_query_or_altered_is_refused` |
+
+Validation details (`error.details[].code`, under a top-level `InvalidRequest`; `target` is the parameter):
+
+| Code | Rule | Test |
+|---|---|---|
+| `UnknownParameter` | The endpoint has no such parameter; a misspelt filter is refused, not ignored | `StaySearchTests.Unknown_parameters_and_malformed_values_are_refused_with_every_problem_listed` |
+| `ParameterRequired` | `checkIn`, `checkOut`, `pickUpAt` or `dropOffAt` is missing | same |
+| `InvalidValue` | A value does not parse (date, number, enumeration), or a parameter is sent twice | same |
+| `LocationRequired` | Stays: neither `destination` nor `bbox`. Cars: neither `pickUpLocationId` nor `lat` and `lon` | `RequestTests.A_destination_or_a_box_is_required`, `CarSearchTests.Cars_page_by_keyset_and_a_request_must_name_a_place_and_a_sensible_period` |
+| `AmbiguousLocation` | Cars: both `pickUpLocationId` and a point | `RequestTests.A_car_search_needs_a_place_and_a_sensible_period` |
+| `DestinationTooLong` | `destination` over 100 characters | `RequestTests` |
+| `InvalidBoundingBox` | `bbox` is not `west,south,east,north` in range, or south is not below north | `RequestTests.A_destination_or_a_box_is_required` |
+| `InvalidPoint` | `lat` or `lon` out of range, or only one given | `RequestTests` |
+| `InvalidRadius` | `radiusKm` zero, negative, or without a point | `RequestTests.A_car_search_needs_a_place_and_a_sensible_period` |
+| `CheckInInPast` | `checkIn` before today (one day of grace for time zones ahead of UTC) | `RequestTests.Check_out_must_follow_check_in_and_check_in_cannot_be_in_the_past` |
+| `CheckOutBeforeCheckIn` | `checkOut` not after `checkIn`; the same code as Stays | same |
+| `StayTooLong` | More than 30 nights; the same code as Stays | `RequestTests.A_stay_is_at_most_thirty_nights`, `StaySearchTests.A_thirty_night_stay_works_and_thirty_one_is_refused` |
+| `GuestsOutOfRange` | `guests` not between 1 and 40 | `RequestTests.Guests_rooms_prices_stars_and_sorting_are_checked` |
+| `RoomsOutOfRange` | `rooms` not between 1 and 9 | same |
+| `InvalidPriceRange` | A negative price, or `minPrice` above `maxPrice` | same |
+| `InvalidStars` | `stars` holds a value outside 1 to 5 | same |
+| `InvalidAmenities` | More than 20 amenities, or one over 50 characters | `RequestTests` |
+| `DistanceNeedsPoint` | `sort=distance` with neither a point nor a `bbox` | `StaySearchTests.Sorting_by_distance_without_a_point_is_a_400_and_a_box_supplies_its_centre` |
+| `PickUpInPast` | `pickUpAt` more than a day ago | `RequestTests` |
+| `DropOffBeforePickUp` | `dropOffAt` not after `pickUpAt` | `RequestTests.A_car_search_needs_a_place_and_a_sensible_period` |
+| `RentalTooLong` | More than 30 rental days | same |
+| `InvalidSeats` | `minSeats` not between 1 and 20 | `RequestTests` |
+| `InvalidCategory` | `category` is not one to four letters | `RequestTests.A_car_search_needs_a_place_and_a_sensible_period` |
+| `QueryTooShort` | Autocomplete `q` under two characters | `AutocompleteTests.Short_text_unknown_kinds_and_unknown_parameters_are_refused` |
+| `QueryTooLong` | Autocomplete `q` over 60 characters | `RequestTests.Autocomplete_needs_two_characters_and_a_kind` |
+| `InvalidTypes` | Autocomplete `types` holds something other than `city`, `airport`, `property` | same |

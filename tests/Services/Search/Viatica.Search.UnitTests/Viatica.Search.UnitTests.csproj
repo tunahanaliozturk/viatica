@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Search\Viatica.Search.Application\Viatica.Search.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Services\Search\Viatica.Search.Infrastructure\Viatica.Search.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

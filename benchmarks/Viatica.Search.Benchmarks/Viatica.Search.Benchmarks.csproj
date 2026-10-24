@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Seeds an OpenSearch index with 10,000 properties and times the hard stays query against it. Run by hand, see
+    docs/benchmark-results/search-query.md. Not a test project: latency on a shared CI runner is noise.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Services\Search\Viatica.Search.Infrastructure\Viatica.Search.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\tests\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

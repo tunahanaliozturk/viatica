@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The read model's behaviour with no technology in it: how events change a document, what a search means, and the
+    ports Infrastructure fills. There is no Domain project because Search owns no invariants, only a copy of what
+    other services decided.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="OrionGuard" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Search.UnitTests" />
+    <InternalsVisibleTo Include="Viatica.Search.Infrastructure" />
+  </ItemGroup>
+
+</Project>
