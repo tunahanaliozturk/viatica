@@ -12,12 +12,15 @@
     <PackageVersion Include="Relevox" Version="1.3.0" />
     <PackageVersion Include="Relevox.Contracts" Version="1.3.0" />
     <PackageVersion Include="OrionGuard" Version="7.0.0" />
+    <!-- Only the outbox spike (ADR 0004) references this. EF Core above is pinned to 11, so the spike runs it on 11. -->
+    <PackageVersion Include="OrionGuard.EntityFrameworkCore" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Data">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(MicrosoftVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(MicrosoftVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.0.0-rc.2" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.20" />
     <PackageVersion Include="OpenSearch.Client" Version="2.2.0" />
@@ -55,6 +58,8 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.16.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <!-- Shared test support is a library, not a test project, so it takes the fixture interfaces without the runner. -->
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.2" />
   </ItemGroup>
 
 </Project>
