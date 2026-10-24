@@ -59,4 +59,32 @@ public sealed class DeadLetterTests(PostgresDatabase database, KafkaFixture kafk
         parked.Headers["dlq-error-type"].ShouldStartWith("System.Text.Json.");
         await Eventually.MatchesAsync(() => TestService.AppliedAsync(host, key), static rows => rows.Count == 1);
     }
+
+    /// <summary>
+    /// A record with a null value (a tombstone) is not an envelope either. It must be parked at once, as it is, and
+    /// the next record on the same partition must still be applied.
+    /// </summary>
+    [Fact]
+    public async Task A_null_valued_record_goes_to_the_dlq_without_retries_and_the_next_record_is_applied()
+    {
+        string topic = await kafka.CreateTopicAsync("tombstone", partitions: 1);
+        string key = Guid.NewGuid().ToString();
+        var attempts = new Attempts();
+        using IHost host = await TestService.StartAsync(database.ConnectionString, kafka, topic, consumerGroup: "tombstone", attempts: attempts);
+        using EventProbe deadLetters = kafka.Probe(topic + ".dlq");
+
+        using (IProducer<string, byte[]> producer = new ProducerBuilder<string, byte[]>(new ProducerConfig { BootstrapServers = kafka.BootstrapServers }).Build())
+        {
+            await producer.ProduceAsync(topic, new Message<string, byte[]> { Key = key, Value = null! });
+        }
+
+        await TestService.PublishAsync(host, new ThingHappened(key, 1));
+
+        ProbedMessage parked = await deadLetters.WaitForAsync(m => m.Key == key);
+        parked.Value.ShouldBeNull();
+        parked.Headers["dlq-attempts"].ShouldBe("0");
+        parked.Headers["dlq-offset"].ShouldBe("0");
+        await Eventually.MatchesAsync(() => TestService.AppliedAsync(host, key), static rows => rows.Count == 1);
+        attempts.Count.ShouldBeEmpty();
+    }
 }
