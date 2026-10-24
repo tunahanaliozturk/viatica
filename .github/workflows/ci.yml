@@ -56,6 +56,26 @@ jobs:
             dotnet run --project "$project" --configuration Release --no-build
           done
 
+  compose:
+    name: compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The local stack exactly as docs/operations.md starts it. --wait returns only once every health check
+      # passes, and fails the step if one never does.
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 600
+
+      # Health checks say a process is up. This says each dependency does its job: per-service database logins
+      # and isolation, topics and partitions, cluster health, Valkey PING, and real Keycloak tokens.
+      - name: Check each dependency answers
+        run: bash deploy/check-stack.sh
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --timestamps
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest
