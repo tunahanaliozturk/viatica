@@ -7,6 +7,12 @@
   <Folder Name="/src/Contracts/">
     <Project Path="src/Contracts/Viatica.Contracts/Viatica.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Cars/">
+    <Project Path="src/Services/Cars/Viatica.Cars.Api/Viatica.Cars.Api.csproj" />
+    <Project Path="src/Services/Cars/Viatica.Cars.Application/Viatica.Cars.Application.csproj" />
+    <Project Path="src/Services/Cars/Viatica.Cars.Domain/Viatica.Cars.Domain.csproj" />
+    <Project Path="src/Services/Cars/Viatica.Cars.Infrastructure/Viatica.Cars.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/Kernel/">
     <Project Path="src/Kernel/Viatica.Kernel/Viatica.Kernel.csproj" />
     <Project Path="src/Kernel/Viatica.Kernel.Messaging/Viatica.Kernel.Messaging.csproj" />
@@ -44,6 +50,10 @@
     <Project Path="tests/Viatica.Kernel.Messaging.IntegrationTests/Viatica.Kernel.Messaging.IntegrationTests.csproj" />
     <Project Path="tests/Viatica.Kernel.UnitTests/Viatica.Kernel.UnitTests.csproj" />
     <Project Path="tests/Viatica.Testing/Viatica.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tests/Services/Cars/">
+    <Project Path="tests/Services/Cars/Viatica.Cars.IntegrationTests/Viatica.Cars.IntegrationTests.csproj" />
+    <Project Path="tests/Services/Cars/Viatica.Cars.UnitTests/Viatica.Cars.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Viatica.LicenseAudit/Viatica.LicenseAudit.csproj" />

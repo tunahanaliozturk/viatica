@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The rental rules: periods, prices, holds, listings. Kernel and OrionGuard only; no EF Core, no Kafka. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Cars.UnitTests" />
+  </ItemGroup>
+
+</Project>
