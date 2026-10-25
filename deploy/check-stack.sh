@@ -195,4 +195,23 @@ grep -q '"token":"pm_' <<< "$tokenised" || fail "payments: the tokenised card ha
 ! grep -q '4242424242424242\|4242 4242 4242 4242' <<< "$tokenised" || fail "payments: the answer to a tokenisation repeats the card number"
 ok "payments: a Keycloak traveller token tokenises a test card through the simulator; the answer holds the last four digits only"
 
+# Booking ---------------------------------------------------------------------------------------------------------
+
+# Ready means the database answers. Beyond that, one round trip through the real token: Keycloak's traveller token
+# must be accepted by Booking (audience, issuer, sub), the draft trip it starts must be invisible to another
+# traveller, and a partner's booking list must answer, empty, rather than refuse.
+booking=http://localhost:8105
+
+curl -fsS "$booking/health/ready" > /dev/null || fail "booking: /health/ready did not answer 200 on 8105"
+
+trip_id=$(printf '%08x-%04x-4%03x-8%03x-%012x' $((RANDOM * 32768 + RANDOM)) "$RANDOM" $((RANDOM % 4096)) $((RANDOM % 4096)) $(((RANDOM << 30) | (RANDOM << 15) | RANDOM)))
+traveller1_token=$(access_token traveller1) || fail "keycloak: traveller1 cannot sign in"
+traveller2_token=$(access_token traveller2) || fail "keycloak: traveller2 cannot sign in"
+created=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$booking/trips/$trip_id?$version" -H "Authorization: Bearer $traveller1_token")
+[[ $created == 201 ]] || fail "booking: starting a trip with a Keycloak traveller token answered $created, expected 201"
+curl -fsS "$booking/trips/$trip_id?$version" -H "Authorization: Bearer $traveller1_token" | grep -q '"status":"Draft"'   || fail "booking: the traveller cannot read their own draft trip"
+[[ $(curl -sS -o /dev/null -w '%{http_code}' "$booking/trips/$trip_id?$version" -H "Authorization: Bearer $traveller2_token") == 404 ]]   || fail "booking: another traveller can see a trip that is not theirs"
+curl -fsS "$booking/partner/bookings?$version" -H "Authorization: Bearer $(access_token partner-stays1)" | grep -q '"value"'   || fail "booking: the partner's booking list does not answer"
+ok "booking: ready, a traveller token starts a draft trip only its traveller sees, the partner list answers"
+
 echo "stack ok"

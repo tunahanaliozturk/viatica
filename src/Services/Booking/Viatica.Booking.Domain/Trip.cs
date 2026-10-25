@@ -189,7 +189,8 @@ public sealed partial class Trip
 
         if (TravellerId is not null)
         {
-            throw BookingErrors.TripAlreadyClaimed();
+            // Someone else's trip is not found, whoever asks (the API checks the key first; this keeps the rule in the aggregate).
+            throw BookingErrors.TripNotFound();
         }
 
         TravellerId = travellerId;

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Viatica.Booking.Domain;
 using Viatica.Contracts;
@@ -16,6 +17,8 @@ public interface IBookingDb
     DbSet<TripItem> Items { get; }
 
     DatabaseFacade Database { get; }
+
+    ChangeTracker ChangeTracker { get; }
 
     /// <summary>Queues an integration event in the outbox; it commits with the next <see cref="SaveChangesAsync"/>.</summary>
     void Publish(IIntegrationEvent message);

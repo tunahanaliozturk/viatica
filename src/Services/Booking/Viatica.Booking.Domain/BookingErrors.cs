@@ -20,7 +20,6 @@ public static class BookingErrorCode
     public const string ItemConflict = nameof(ItemConflict);
     public const string QuoteExpired = nameof(QuoteExpired);
     public const string QuoteInvalid = nameof(QuoteInvalid);
-    public const string TripAlreadyClaimed = nameof(TripAlreadyClaimed);
     public const string TripAlreadyExists = nameof(TripAlreadyExists);
 }
 
@@ -60,7 +59,4 @@ public static class BookingErrors
 
     public static ApiErrorException ItemNotCancellable(string reason) =>
         ApiErrorException.Conflict(BookingErrorCode.ItemNotCancellable, reason);
-
-    public static ApiErrorException TripAlreadyClaimed() =>
-        ApiErrorException.Conflict(BookingErrorCode.TripAlreadyClaimed, "The trip belongs to someone else already.");
 }

@@ -50,7 +50,25 @@ public sealed class CreateTripHandler(IBookingDb db, DirectivePublisher publishe
 
         db.Trips.Add(trip);
         publisher.Publish(trip, trip.TakeDirectives());
-        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Another request with this id got in between the read above and the insert. If it was the same caller's,
+            // it was the same request, and this one is its repeat: answer with the trip it made. Anything else is not
+            // ours to hide.
+            db.ChangeTracker.Clear();
+            Trip? winner = await db.Trips.Include(static t => t.Items).AsNoTracking().FirstOrDefaultAsync(t => t.Id == request.TripId, cancellationToken);
+            if (winner is null || !request.Caller.Owns(winner))
+            {
+                throw;
+            }
+
+            return new Resource<TripView>(Views.Of(winner), winner.Version);
+        }
 
         return new Resource<TripView>(Views.Of(trip), trip.Version, IsNew: true);
     }

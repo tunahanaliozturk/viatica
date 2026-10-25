@@ -32,6 +32,8 @@ and none of them may be reused in any other environment.
 | `psp-sim` | built from `src/Simulators/Viatica.PspSim` | 8202 | none; its admin API is unauthenticated, never expose it | The payment provider simulator: Stripe shaped, in memory, test cards and failure knobs (`docs/psp-sim.md`) |
 | `payments-migrate` | built from `src/Services/Payments` | none | `payments` role | One-shot: applies the Payments migrations, then exits 0 |
 | `payments` | built from `src/Services/Payments` | 8106 | tokens from Keycloak, audience `payments-api` | The Payments service: card tokens, authorise, capture, void and refund (`docs/services/payments.md`) |
+| `booking-migrate` | built from `src/Services/Booking` | none | `booking` role | One-shot: applies the Booking migrations, then exits 0 |
+| `booking` | built from `src/Services/Booking` | 8105 | tokens from Keycloak, audience `booking-api` | The Booking service: trips, the checkout saga, cancellation (`docs/services/booking.md`) |
 
 Images are pinned by digest in `compose.yaml`; the table shows the tags.
 
@@ -151,7 +153,61 @@ losing or duplicating an effect. They are written with the milestone that builds
 
 ### Stuck checkout saga
 
-To be written with Booking (M5).
+**Shows up as** a checkout operation that stays `Running` well past the 15 minutes a hold lasts; `booking.sagas` ending
+fewer trips than `booking.checkouts` starts; `booking.deadlines.reached` rising (holds or tickets are not arriving in
+time); `booking.compensations` rising with no deadline behind it (answers are failing); and, in the logs, `reached its
+deadline` (warning) and `The scheduled check of trip ... failed` (error). A trip is stuck if it is in `Holding`,
+`Authorizing`, `Ticketing` or `Unwinding` with `updated_at` more than a few minutes old, or in `Committing` or `Capturing`
+for more than a minute or two.
+
+**Confirm** which trips and why, in the `booking` database:
+
+```sql
+select id, status, failure, payment_status, checkout_started_at, deadline, next_check_at, updated_at
+from booking.trips
+where status in ('Holding','Authorizing','Ticketing','Committing','Capturing','Unwinding')
+order by checkout_started_at limit 20;
+
+select id, kind, status, awaiting, order_id, hold_id, expires_at, refusal
+from booking.trip_items where trip_id = '<trip id>' order by added_at;
+```
+
+`awaiting` is the one request the trip has sent and not had answered: `Hold` (the first request), `Ticketing`,
+`Commit`, `Release`, `Void` or `Cancel`. Read the trip from it:
+
+- `Holding`, `Authorizing` or `Ticketing`, `deadline` in the past, still not `Unwinding`: the scheduled check is not
+  running. It runs in every instance, every 5 seconds, against `next_check_at`. Look for `The scheduled check ... failed`
+  (the database or a lock), and check the service is up. Nothing is lost: the first check that runs unwinds the trip.
+- `Unwinding`, some item `awaiting` `Release`, `Void` or `Cancel`: the owner has not confirmed. The request is sent
+  again every 30 seconds, so a slow owner finishes on its own. If it stays, the owner is down or the message is on its
+  dead letter topic (`booking.v1.dlq` carries what Booking sent, `<owner>.v1.dlq` what the owner could not deliver back;
+  see "Dead letter queue growth"). Fix the owner, replay, and the trip finishes when the answer lands.
+- `Unwinding`, a flight `Pending` with `awaiting = Hold` and no `order_id`: Flights never answered the order request.
+  Booking cannot void an order whose id it was never given, so it waits. The late `FlightOrderCreated`, if it ever
+  comes, is voided at once. If the airline cannot have made the order (ask for the item id as the idempotency key at the
+  airline, `docs/airline-sim.md` for the simulator), settle the item by hand and let the next check finish the trip:
+
+  ```sql
+  update booking.trip_items set status = 'Rejected', awaiting = 'None' where id = '<item id>' and order_id is null;
+  update booking.trips set next_check_at = now() where id = '<trip id>';
+  ```
+
+  An unwinding trip is looked at as a whole again at that check, so it goes to `Failed` and announces `TripFailed`.
+- `Committing`, an item `awaiting = Commit` for minutes: Stays or Cars has not answered the commit. Its own sweeper
+  decides: if the hold expired you will see `StayHoldExpired` or `CarHoldExpired` and the trip unwinds; if the
+  owner is down, bring it back and the commit lands.
+- `Capturing` for minutes: Payments has not answered. The contracts have no capture failure event, so a capture that
+  failed for good leaves the trip here. Look in Payments for the operation (`payment_id` on the trip) and its outcome;
+  if it was captured, replay `PaymentCaptured` to `payments.v1` (the inbox makes a replay of something applied a
+  no-op); if it cannot be, the tickets and rooms are real and the decision is a person's.
+- `Failed` but an owner still shows a live hold, order or authorisation (a reconciliation failure): the trip is
+  `Failed` with an item `awaiting` `Release` or `Void` still set. It is resent every 30 seconds while that stays set;
+  an answer that never comes is the same case as above. The owner's own sweeper gives a stay or car back after 15
+  minutes and an airline releases an order at its ticketing time limit, which bounds the damage.
+
+**Recover** nothing by editing statuses except the single case above. Every state change is an event consumed by the
+trip's aggregate, and a row changed by hand skips the events that would have followed it. Prefer fixing the owner and
+letting the resend finish the trip.
 
 ### Airline outage
 

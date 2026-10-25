@@ -344,6 +344,30 @@ public sealed class SagaBranchTests
     }
 
     [Fact]
+    public void An_unwinding_trip_that_waits_on_an_owner_is_looked_at_again_every_interval_and_finishes_when_the_wait_is_over()
+    {
+        // The flight never answered, so there is nothing to resend and nothing to void: the trip waits.
+        var t = new TripScenario(stay: false, car: false);
+        t.CheckOut();
+        DateTimeOffset deadline = t.Trip.Deadline!.Value;
+        t.Trip.RunScheduledChecks(deadline);
+        t.Trip.Status.ShouldBe(TripStatus.Unwinding);
+        DateTimeOffset first = t.Trip.NextCheckAt!.Value;
+        first.ShouldBe(deadline + SagaTimings.Default.ResendAfter);
+
+        t.Trip.RunScheduledChecks(first.AddSeconds(-1)).ShouldBeEmpty();
+        t.Trip.NextCheckAt.ShouldBe(first, "not due yet, so nothing moved");
+        t.Trip.RunScheduledChecks(first).ShouldBeEmpty("there is nothing to send");
+        t.Trip.NextCheckAt.ShouldBe(first + SagaTimings.Default.ResendAfter);
+        t.Trip.Status.ShouldBe(TripStatus.Unwinding);
+
+        // The airline's answer arrives at last, or the item is settled by hand: either way the next look finishes the trip.
+        t.Trip.Items.Single().Awaiting.ShouldBe(ItemRequest.Hold);
+        t.Trip.OnFlightOrderRejected(t.Flight, "SupplierUnavailable", t.Now).OfType<TripFailedAnnouncement>().ShouldHaveSingleItem();
+        t.Trip.NextCheckAt.ShouldBeNull();
+    }
+
+    [Fact]
     public void Nothing_scheduled_is_due_for_a_draft_or_a_confirmed_trip()
     {
         var draft = new TripScenario();

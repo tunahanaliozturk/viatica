@@ -4,6 +4,59 @@ Every error answers in the envelope described in [conventions.md](conventions.md
 `error.message` is for people. The shared codes (`InvalidRequest`, `NotFound`, `Conflict`, ...) are listed there.
 This page lists what each service adds. Each service keeps its own section self-contained.
 
+## Booking
+
+HTTP errors from `Viatica.Booking.Api`. A trip that is someone else's is a `404 TripNotFound`, the same as one that
+does not exist, so an id says nothing about whose it is. Failures of the checkout itself are not HTTP errors: the
+checkout answers `202` and the failure is on the operation (below).
+
+| Status | Code | When | Test |
+|---|---|---|---|
+| 404 | `TripNotFound` | No such trip, not yours, or an anonymous trip without its `Trip-Access-Key` | `TenancyTests.Another_traveller_cannot_see_change_start_or_follow_a_trip_and_is_told_it_does_not_exist` |
+| 404 | `ItemNotFound` | The item is not on this trip | `CancellationTests.What_cannot_be_cancelled_says_why` |
+| 409 | `TripAlreadyExists` | `PUT /trips/{id}` for an id that belongs to someone else | `TenancyTests.An_anonymous_trip_needs_a_key_of_its_own_and_a_taken_id_is_a_conflict` |
+| 409 | `TripNotEditable` | Adding or removing an item after checkout began | `ApiSurfaceTests.A_draft_can_lose_an_item_and_a_trip_that_is_checked_out_can_no_longer_be_edited` |
+| 409 | `TripFull` | More than 10 items on a trip | `SagaBranchTests.The_draft_rules_hold_an_item_cap_idempotent_adds_and_no_edits_after_checkout` |
+| 409 | `ItemConflict` | The item id exists on the trip with other contents | `ApiSurfaceTests.An_item_is_checked_when_it_is_added_and_adding_the_same_one_again_changes_nothing` |
+| 409 | `QuoteExpired` | The quote token on an item has expired, when it is added or when the checkout starts. `target`: `items/{id}` | `ApiSurfaceTests.A_quote_that_has_expired_is_a_conflict_and_a_flight_without_an_offer_names_its_missing_fields`, `SagaBranchTests.An_expired_quote_stops_the_checkout_before_anything_is_sent` |
+| 409 | `TripEmpty` | Checkout of a trip with no items | `CheckoutTests.An_empty_trip_and_a_trip_that_is_not_yours_cannot_be_checked_out` |
+| 409 | `CheckoutConflict` | The trip was checked out already with a different body | `CheckoutTests.The_same_trip_with_a_different_body_is_a_conflict_and_changes_nothing` |
+| 409 | `CheckoutInProgress` | Cancelling an item while the checkout is still running or unwinding | `CancellationTests.What_cannot_be_cancelled_says_why` |
+| 409 | `ItemNotCancellable` | The trip is a draft or failed, the item is not confirmed, or the stay or rental has started | `CancellationTests.What_cannot_be_cancelled_says_why`, `A_stay_that_has_started_cannot_be_cancelled` |
+| 400 | `QuoteInvalid` | The quote token is unreadable, for another kind of item, or not in EUR. `target`: `quoteToken` | `ApiSurfaceTests.A_quote_token_that_is_not_one_for_that_kind_of_item_is_refused` |
+| 400 | `AccessKeyRequired` | An anonymous trip without a `Trip-Access-Key` of 22 to 128 characters (listed in `details`) | `TenancyTests.An_anonymous_trip_needs_a_key_of_its_own_and_a_taken_id_is_a_conflict` |
+
+Validation details (`error.details[].code`; `target` is the request field, and a message never repeats a value):
+
+| Code | Target | Rule |
+|---|---|---|
+| `InvalidTripId`, `InvalidItemId` | `tripId`, `itemId` | Not the empty id |
+| `InvalidKind` | `kind` | `Stay`, `Car` or `Flight` |
+| `QuoteTokenRequired` | `quoteToken` | A stay or a car needs one, at most 2048 characters |
+| `OfferIdRequired`, `ExpectedTotalRequired` | `offerId`, `expectedTotal` | A flight needs the re-priced offer id (at most 64 characters) and a total above zero in EUR |
+| `InvalidDescription` | `description` | At most 200 characters |
+| `SignInRequired` | `Authorization` | Checkout needs a signed-in traveller |
+| `InvalidEmail`, `InvalidPhone` | `contact.email`, `contact.phone` | An address with an `@`, at most 254; a phone of at most 32 characters |
+| `InvalidPassengerCount` | `passengers` | 1 to 9 |
+| `InvalidPassengerName`, `InvalidBirthDate`, `InvalidDocumentNumber` | `passengers` | Names of up to 100 characters; a birth date between 1900 and today; a document number of up to 40 characters |
+| `NoAdult` | `passengers` | At least one adult |
+| `PaymentMethodTokenRequired` | `paymentMethodToken` | Present, at most 200 characters |
+
+`ApiSurfaceTests`, `CheckoutTests.A_checkout_that_is_not_valid_names_every_field_and_starts_nothing` and
+`ApplicationTests` hold these.
+
+A failed checkout or cancellation is an operation (`GET /operations/{id}`), `status: Failed`, with `error.code`:
+
+| Code | Operation | Meaning |
+|---|---|---|
+| `ItemRejected` | checkout | An owner refused a hold or an order. The trip is `Failed`, nothing is held, nothing is charged |
+| `PaymentDeclined` | checkout | The card was declined |
+| `TicketingRefused` | checkout | The airline would not issue tickets |
+| `DeadlineReached` | checkout | A hold or ticketing limit was about to lapse, or a commit lost to an owner's sweeper |
+| `CancellationTimedOut` | cancellation | The owner did not confirm in time. The item is still the traveller's; ask again |
+
+`FailureTests`, `DeadlineTests` and `CancellationTests.A_cancel_its_owner_never_answers_times_out_can_be_asked_again_and_a_late_answer_still_counts`.
+
 ## Cars
 
 HTTP errors from `Viatica.Cars.Api`. Quotes need no token; everything else needs a partner token, and a resource of

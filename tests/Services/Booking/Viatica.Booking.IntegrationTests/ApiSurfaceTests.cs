@@ -115,6 +115,20 @@ public sealed class ApiSurfaceTests(WorldFixture fixture) : IClassFixture<WorldF
     }
 
     [Fact]
+    public async Task Many_creates_of_one_trip_at_once_make_one_trip_and_answer_the_rest_with_it()
+    {
+        Guid trip = Guid.CreateVersion7();
+
+        HttpResponseMessage[] answers = await Task.WhenAll(
+            Enumerable.Range(0, 16).Select(_ => world.SendAsync(HttpMethod.Put, $"/trips/{trip}", token: world.Traveller)));
+
+        answers.Count(static a => a.StatusCode == HttpStatusCode.Created).ShouldBe(1);
+        answers.ShouldAllBe(static a => a.StatusCode == HttpStatusCode.Created || a.StatusCode == HttpStatusCode.OK, "the others are repeats of the first, and answer with its trip");
+        (await world.SendAsync(HttpMethod.Get, $"/trips/{trip}", token: world.Traveller)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await world.AllAsync("TripStateChanged", trip)).Count.ShouldBe(1, "one trip was made, so one Draft was announced");
+    }
+
+    [Fact]
     public async Task A_skiptoken_from_another_list_is_refused()
     {
         HttpResponseMessage bad = await world.SendAsync(HttpMethod.Get, "/trips?$skiptoken=AQIDBA", token: world.Traveller);

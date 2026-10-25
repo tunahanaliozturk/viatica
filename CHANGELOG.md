@@ -64,6 +64,17 @@ All notable changes to this project are documented here. The format follows
   `UPDATE`. Commit, release and cancel are idempotent, and a sweeper expires holds after 15 minutes
   (`docs/services/cars.md`, `http/cars.http`).
 - `cars` and `cars-migrate` in `compose.yaml`, and a Cars probe in `deploy/check-stack.sh`.
+- Booking service (`src/Services/Booking`, port 8105): trips of stays, cars and flights, anonymous trips claimed at
+  sign in, and the checkout saga as state on the `Trip` aggregate (hold, authorise, ticket, commit, capture) with a
+  deadline driven by a scheduled check, full unwinding, and compensation for every late answer. Checkout is a `PUT`
+  with the trip's id, answered by an operation and a progress stream; cancellation per item refunds by the item's own
+  policy; travellers list their trips and partners the bookings against their inventory
+  (`docs/services/booking.md`, ADR 0006, `http/booking.http`). Passenger data is sealed with the key shared with
+  Flights, kept sealed only while the saga runs and never logged.
+- `booking` and `booking-migrate` in `compose.yaml`, a Booking probe in `deploy/check-stack.sh`, and one
+  `x-passenger-key` anchor that Booking and Flights both read.
+- `HoldTerms` (partner, start, cancellation policy) on `StayHoldPlaced` and `CarHoldPlaced`, filled by Stays and Cars,
+  and `TripStateChanged`, `TripItemStateChanged` and `TripClaimed` on `booking.v1`.
 - Search service (`src/Services/Search`, port 8104): stays search by destination text or map box, with availability
   on every night of the stay, filters, three sorts, facet counts and keyset paging; car search by location or radius
   with the one way rule; autocomplete over cities, airports and properties. A read model of `stays.v1` and

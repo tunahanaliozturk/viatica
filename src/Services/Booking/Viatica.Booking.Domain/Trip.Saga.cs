@@ -260,10 +260,24 @@ public sealed partial class Trip
             BeginUnwinding(FailureReason.DeadlineReached, now);
         }
 
+        bool lookAgain = Status == TripStatus.Unwinding && (CompensationSentAt ?? UpdatedAt) + ResendAfter <= now;
+        if (lookAgain)
+        {
+            // An unwinding trip is looked at as a whole again every interval, as an answer would make it. Nothing is
+            // lost if a message was, and a trip whose stuck item was settled by hand (docs/operations.md, "Stuck
+            // checkout saga") finishes here without waiting for an event that will never come.
+            Advance(now);
+        }
+
         if (Status is TripStatus.Unwinding or TripStatus.Failed && HasOutstandingCompensation
             && CompensationSentAt is { } sentAt && sentAt + ResendAfter <= now)
         {
             Resend(now);
+        }
+        else if (lookAgain && Status == TripStatus.Unwinding)
+        {
+            CompensationSentAt = now;
+            changed = true;
         }
 
         foreach (TripItem item in items.Where(i => i.Cancel == CancelState.Requested && i.CancelDeadline <= now))
@@ -312,6 +326,11 @@ public sealed partial class Trip
         if (Status is TripStatus.Unwinding or TripStatus.Failed && HasOutstandingCompensation && CompensationSentAt is { } sentAt)
         {
             next = Earliest(next, sentAt + ResendAfter);
+        }
+
+        if (Status == TripStatus.Unwinding)
+        {
+            next = Earliest(next, (CompensationSentAt ?? UpdatedAt) + ResendAfter);
         }
 
         foreach (TripItem item in items.Where(static i => i.Cancel == CancelState.Requested && i.CancelDeadline is not null))
