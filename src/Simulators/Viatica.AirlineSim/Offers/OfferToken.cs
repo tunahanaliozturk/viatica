@@ -24,6 +24,12 @@ internal sealed record OfferToken(
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
+    // Far above any fare the sim prices (a nine seat business booking is a few tens of thousands), far below what
+    // overflows a decimal when base and taxes are added.
+    private const decimal MaxAmount = 1_000_000m;
+
+    private const int MaxLegs = 8;
+
     [JsonIgnore]
     public PassengerMix Mix => new(Passengers[0], Passengers[1], Passengers[2]);
 
@@ -45,19 +51,32 @@ internal sealed record OfferToken(
 
     public string Encode() => Base64Url.EncodeToString(JsonSerializer.SerializeToUtf8Bytes(this, OfferTokenJson.Default.OfferToken));
 
-    /// <summary>Reads an offer id, or returns null for anything that is not one of ours.</summary>
+    /// <summary>
+    /// Reads an offer id, or returns null for anything that is not one of ours. The id is unsigned, so everything in
+    /// it is checked here, once, and the rest of the sim can trust a decoded token to be one it could have issued in
+    /// shape: right element types, a timestamp <see cref="DateTimeOffset"/> can hold, passenger counts a booking
+    /// allows, and amounts that are non-negative cents.
+    /// </summary>
     public static OfferToken? Decode(string offerId)
     {
         try
         {
             OfferToken? token = JsonSerializer.Deserialize(Base64Url.DecodeFromChars(offerId), OfferTokenJson.Default.OfferToken);
-            return token is { Airline: not null, Passengers.Length: 3, Legs.Length: > 0 } ? token : null;
+            return token is { Airline: not null, Passengers.Length: 3, Legs.Length: > 0 and <= MaxLegs } && token.IsWellFormed() ? token : null;
         }
         catch (Exception exception) when (exception is FormatException or JsonException)
         {
             return null;
         }
     }
+
+    private bool IsWellFormed() =>
+        Legs.All(static leg => !string.IsNullOrEmpty(leg)) &&
+        Mix.Problem() is null &&
+        ExpiresAt >= DateTimeOffset.MinValue.ToUnixTimeSeconds() && ExpiresAt <= DateTimeOffset.MaxValue.ToUnixTimeSeconds() &&
+        IsAmount(Base) && IsAmount(Taxes);
+
+    private static bool IsAmount(decimal amount) => amount is >= 0m and <= MaxAmount && decimal.Round(amount, 2) == amount;
 
     /// <summary>Resolves the legs against the network, or null when a flight in the id does not exist.</summary>
     public Leg[]? ResolveLegs(RouteNetwork network)
