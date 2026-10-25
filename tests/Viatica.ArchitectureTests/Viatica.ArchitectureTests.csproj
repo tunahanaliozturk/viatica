@@ -16,6 +16,7 @@
     references. The kernel and the contracts are referenced directly because they have no host of their own.
   -->
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Services\Booking\Viatica.Booking.Api\Viatica.Booking.Api.csproj" />
     <ProjectReference Include="..\..\src\Services\Cars\Viatica.Cars.Api\Viatica.Cars.Api.csproj" />
     <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Web\Viatica.Kernel.Web.csproj" />
     <ProjectReference Include="..\..\src\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />

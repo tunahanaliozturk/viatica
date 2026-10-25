@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    The trip aggregate and the saga as a state machine, against a model of the owners that answers late, twice and
+    out of order; the cancellation policies; the validators and the sealing of traveller data. No containers:
+    everything with a database or a broker is in the integration tests.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Booking\Viatica.Booking.Domain\Viatica.Booking.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

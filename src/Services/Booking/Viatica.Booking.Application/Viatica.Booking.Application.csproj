@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Use cases, validators, the narrow IBookingDb, the sealing of traveller data and the handlers for what Stays, Cars,
+    Flights and Payments report. EF Core without a provider, Relevox.Contracts without the generator: the host picks both.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="OrionGuard" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Booking.Domain\Viatica.Booking.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Booking.UnitTests" />
+    <InternalsVisibleTo Include="Viatica.Booking.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

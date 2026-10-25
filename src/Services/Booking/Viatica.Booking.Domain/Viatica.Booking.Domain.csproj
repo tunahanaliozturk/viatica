@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Trips, their items and the checkout saga as state on the aggregate. Kernel and OrionGuard only; no framework.
+    The aggregate answers every event with the instructions the saga must send next, as plain records, and does
+    not know the contracts or Kafka (tests/Viatica.ArchitectureTests).
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Booking.UnitTests" />
+  </ItemGroup>
+
+</Project>
