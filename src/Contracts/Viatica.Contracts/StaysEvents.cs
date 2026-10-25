@@ -61,7 +61,8 @@ public sealed record StayHoldPlaced(
     DateOnly CheckOut,
     int Quantity,
     Price Total,
-    DateTimeOffset ExpiresAt) : IIntegrationEvent
+    DateTimeOffset ExpiresAt,
+    HoldTerms? Terms = null) : IIntegrationEvent
 {
     [JsonIgnore]
     public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);

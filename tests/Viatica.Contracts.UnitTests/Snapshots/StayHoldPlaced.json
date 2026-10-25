@@ -11,5 +11,13 @@
     "amount": "312.50",
     "currency": "EUR"
   },
-  "expiresAt": "2026-12-01T09:30:00+00:00"
+  "expiresAt": "2026-12-01T09:30:00+00:00",
+  "terms": {
+    "partnerId": "8bac7837-2401-4e81-547f-4a92c026eda6",
+    "startsAt": "2026-12-01T09:30:00+00:00",
+    "cancellationPolicy": {
+      "freeUntilHoursBeforeStart": 2,
+      "penaltyAfter": "FirstUnit"
+    }
+  }
 }

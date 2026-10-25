@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Relevox;
 using Viatica.Cars.Application.Features.Holds;
@@ -27,7 +28,8 @@ public sealed class CarHoldRequestedHandler(ISender sender, ICarsDb db, ILogger<
             case Placed(CarHold hold):
                 db.Publish(new CarHoldPlaced(
                     hold.Id, hold.TripId, hold.ItemId, hold.LocationId, hold.CategoryId, hold.DropOffLocationId,
-                    hold.PickUpAt, hold.DropOffAt, new Price(hold.Total, "EUR"), hold.ExpiresAt));
+                    hold.PickUpAt, hold.DropOffAt, new Price(hold.Total, "EUR"), hold.ExpiresAt,
+                    await TermsAsync(hold, cancellationToken)));
                 CarsTelemetry.HoldsPlaced.Add(1);
                 break;
 
@@ -44,6 +46,28 @@ public sealed class CarHoldRequestedHandler(ISender sender, ICarsDb db, ILogger<
             case null:
                 throw new UnreachableException("A union value with no case means the use case returned default.");
         }
+    }
+
+    // Booking needs the partner (for its bookings list) and the cancellation policy as it stood at the hold. Read
+    // from the location now, which is the same moment for a new hold and a close one for an answer sent again.
+    private async Task<HoldTerms> TermsAsync(CarHold hold, CancellationToken cancellationToken)
+    {
+        var location = await db.Locations.AsNoTracking()
+            .Where(l => l.Id == hold.LocationId)
+            .Select(static l => new { l.PartnerId, l.Cancellation })
+            .SingleAsync(cancellationToken);
+
+        return new HoldTerms(
+            location.PartnerId,
+            hold.PickUpAt,
+            new Contracts.CancellationPolicy(
+                location.Cancellation.FreeUntilHoursBeforeStart,
+                location.Cancellation.PenaltyAfter switch
+                {
+                    Domain.CancellationPenalty.FirstDay => Contracts.CancellationPenalty.FirstUnit,
+                    Domain.CancellationPenalty.FullAmount => Contracts.CancellationPenalty.FullAmount,
+                    _ => throw new InvalidOperationException("Unknown cancellation penalty."),
+                }));
     }
 }
 
