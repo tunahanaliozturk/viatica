@@ -47,6 +47,8 @@ x-payments-environment: &payments-environment
   Viatica__Api__SupportedApiVersions__0: "2026-11-01"
   Viatica__Api__SkipTokenKey: dmlhdGljYS1kZXYtc2tpcHRva2VuLWtleS0wMDAwMDA=
   Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+  # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
+  Viatica__Auth__AllowInsecureMetadata: "true"
   Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
   Payments__Provider__BaseUrl: http://psp-sim:8080/
   OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
