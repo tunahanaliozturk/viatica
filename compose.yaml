@@ -25,6 +25,8 @@ x-flights-environment: &flights-environment
   Viatica__Pii__PassengerKey: dmlhdGljYS1kZXYtcGFzc2VuZ2VyLWtleS0wMDAwMDA=
   Viatica__Pii__StorageKey: dmlhdGljYS1kZXYtZmxpZ2h0cy1zdG9yYWdlLWtleSE=
   Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+  # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
+  Viatica__Auth__AllowInsecureMetadata: "true"
   Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
   Flights__Suppliers__Airlines__0__Code: ZC
   Flights__Suppliers__Airlines__0__BaseUrl: http://airline-sim:8080/ndc/ZC/
@@ -167,6 +169,8 @@ services:
       # Search answers anonymously; the authority is only needed if a request carries a token. Keys are fetched over
       # the compose network, and tokens name the address a person uses.
       Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+      # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
+      Viatica__Auth__AllowInsecureMetadata: "true"
       Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
       OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
     depends_on:
@@ -330,6 +334,8 @@ services:
       Stays__QuoteKey: Zyff4kxJEPWOPsKJneCRSp3FU7ZO7qJiP3ltdRfCU+4=
       # Keycloak is reached by its service name, but tokens name the address a person uses.
       Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+      # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
+      Viatica__Auth__AllowInsecureMetadata: "true"
       Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
       OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
     depends_on:
@@ -373,6 +379,8 @@ services:
       Viatica__Api__SkipTokenKey: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=
       Viatica__Quotes__SigningKey: ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4Q=
       Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+      # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
+      Viatica__Auth__AllowInsecureMetadata: "true"
       Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
       OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
     depends_on:

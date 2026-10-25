@@ -46,7 +46,9 @@ public static class ViaticaAuthentication
     /// <c>ValidIssuer</c> when the public issuer differs from the address services reach Keycloak on, and
     /// <c>TestSigningKey</c> (base64, 32 bytes or more) which replaces Keycloak with a symmetric key for tests.
     /// The test key is refused in Production, so a misconfigured deployment fails at start-up rather than
-    /// accepting self-minted tokens.
+    /// accepting self-minted tokens. Signing keys are fetched from the authority, so outside Development it must be
+    /// an <c>https</c> address and metadata is only fetched over https; <c>AllowInsecureMetadata</c> (true) is the
+    /// explicit opt-in for a stack that keeps Keycloak on a private http network, such as the local compose file.
     /// </remarks>
     public static TBuilder AddViaticaAuth<TBuilder>(this TBuilder builder, string audience)
         where TBuilder : IHostApplicationBuilder
@@ -61,6 +63,17 @@ public static class ViaticaAuthentication
         if (testKey is not null && builder.Environment.IsProduction())
         {
             throw new InvalidOperationException("Viatica:Auth:TestSigningKey must not be set in Production.");
+        }
+
+        // Also checked here, for the same reason. A token's keys come from the authority; over http anyone on the path
+        // can swap them and mint tokens, and the option below would not have stopped it.
+        bool insecureMetadata = builder.Environment.IsDevelopment() || settings.GetValue<bool>("AllowInsecureMetadata");
+        if (testKey is null && settings["Authority"] is { } configured
+            && !configured.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !insecureMetadata)
+        {
+            throw new InvalidOperationException(
+                "Viatica:Auth:Authority must be an https address outside Development. Set Viatica:Auth:AllowInsecureMetadata " +
+                "to true only for a stack whose identity provider is reachable over a private http network.");
         }
 
         builder.Services
@@ -83,7 +96,7 @@ public static class ViaticaAuthentication
 
                 options.Authority = settings["Authority"]
                     ?? throw new InvalidOperationException("Viatica:Auth:Authority is required.");
-                options.RequireHttpsMetadata = !builder.Environment.IsDevelopment() && options.Authority.StartsWith("https", StringComparison.Ordinal);
+                options.RequireHttpsMetadata = !insecureMetadata;
 
                 if (settings["ValidIssuer"] is { } issuer)
                 {

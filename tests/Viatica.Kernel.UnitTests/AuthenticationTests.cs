@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Viatica.Kernel.Web;
 using Viatica.Testing;
 
@@ -83,6 +86,34 @@ public sealed class AuthenticationTests : IAsyncLifetime
     public void The_test_signing_key_is_refused_in_production() =>
         Should.Throw<InvalidOperationException>(() => Build("Production", TestTokens.SigningKeyBase64));
 
+    // The metadata (signing keys) is fetched from the authority. Over plain http anyone on the path can swap the keys
+    // and then mint tokens, so outside Development that is refused unless it is switched on by name.
+    [Fact]
+    public void An_http_authority_outside_development_is_refused_at_startup() =>
+        Should.Throw<InvalidOperationException>(() => Build("Production", signingKey: null, authority: "http://keycloak:8080/realms/viatica"))
+            .Message.ShouldContain("AllowInsecureMetadata");
+
+    [Fact]
+    public async Task An_https_authority_in_production_requires_https_metadata()
+    {
+        await using WebApplication production = Build("Production", signingKey: null, authority: "https://login.example.com/realms/viatica");
+
+        RequireHttpsMetadata(production).ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("Development", null)]
+    [InlineData("Production", "true")]
+    public async Task An_http_authority_needs_development_or_an_explicit_opt_in(string environment, string? allow)
+    {
+        await using WebApplication local = Build(environment, signingKey: null, authority: "http://keycloak:8080/realms/viatica", allowInsecureMetadata: allow);
+
+        RequireHttpsMetadata(local).ShouldBeFalse();
+    }
+
+    private static bool RequireHttpsMetadata(WebApplication app) =>
+        app.Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme).RequireHttpsMetadata;
+
     private async Task<HttpResponseMessage> Get(string path, string token)
     {
         using HttpRequestMessage request = new(HttpMethod.Get, path + "?api-version=2026-11-01");
@@ -90,7 +121,7 @@ public sealed class AuthenticationTests : IAsyncLifetime
         return await client.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
-    private static WebApplication Build(string environment, string signingKey)
+    private static WebApplication Build(string environment, string? signingKey, string? authority = null, string? allowInsecureMetadata = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = environment });
         builder.WebHost.UseTestServer();
@@ -98,6 +129,8 @@ public sealed class AuthenticationTests : IAsyncLifetime
         builder.Configuration["Viatica:Api:SkipTokenKey"] = Keys.SkipTokenBase64;
         builder.Configuration["Viatica:Api:SupportedApiVersions:0"] = "2026-11-01";
         builder.Configuration["Viatica:Auth:TestSigningKey"] = signingKey;
+        builder.Configuration["Viatica:Auth:Authority"] = authority;
+        builder.Configuration["Viatica:Auth:AllowInsecureMetadata"] = allowInsecureMetadata;
         builder.AddViaticaApi();
         builder.AddViaticaAuth(Audience);
         return builder.Build();
