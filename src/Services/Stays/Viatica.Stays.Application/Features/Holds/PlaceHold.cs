@@ -23,6 +23,8 @@ public sealed record QuoteInvalid;
 /// they are a union and not exceptions (ADR 0001). The union stays inside the service: the wire carries
 /// <see cref="StayHoldPlaced"/> or <see cref="StayHoldRejected"/>.
 /// </summary>
+public union HoldOutcome(HoldPlaced, SoldOut, NotBookable, QuoteExpired, QuoteInvalid);
+
 /// <summary>What the property said when the hold was placed: whose it is, when check-in opens, and the cancellation policy.</summary>
 internal sealed record PropertyTerms(
     PropertyStatus Status, Guid PartnerId, TimeOnly CheckInFrom, int FreeCancellationHours, Domain.CancellationPenalty Penalty)
@@ -43,8 +45,6 @@ internal sealed record PropertyTerms(
                 _ => throw new InvalidOperationException("Unknown cancellation penalty."),
             }));
 }
-
-public union HoldOutcome(HoldPlaced, SoldOut, NotBookable, QuoteExpired, QuoteInvalid);
 
 /// <summary>
 /// Booking asks for a hold with a quote token. The token is checked, then every night of the stay is reserved in one
