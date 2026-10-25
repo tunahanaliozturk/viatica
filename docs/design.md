@@ -135,6 +135,8 @@ nothing, and refusing it would make Booking unwind a trip whose flights are alre
 One payment per trip: authorise the sum of the authoritative item totals from the hold and order events, capture
 the same amount on confirmation, refunds per cancellation. Payments answers every request with exactly one outcome
 event per operation id, even when the provider timed out (it asks the provider for the outcome first).
+A capture, void or refund that a money rule or the provider refuses is answered with `PaymentOperationRefused`, so Booking
+is never left waiting. The details are in `docs/services/payments.md` and ADR 0006.
 
 ## Invariants the system tests reconcile
 
@@ -160,7 +162,7 @@ codes live in `Viatica.Kernel`. Service codes start with these:
 | Cars | `LocationNotFound`, `CategoryNotFound`, `OneWayNotAllowed`, `DriverTooYoung`, `LocationClosed`, `SoldOut`, `QuoteExpired`, `QuoteInvalid` |
 | Flights | `SearchExpired`, `OfferExpired`, `PriceChanged`, `InvalidPassengers`, `NoSuppliersAvailable` |
 | Booking | `TripNotFound`, `TripNotEditable`, `ItemNotFound`, `ItemNotCancellable`, `CheckoutInProgress` |
-| Payments | `PaymentMethodInvalid`, `PaymentNotFound` |
+| Payments | `PaymentMethodInvalid`, `PaymentNotFound`, `ProviderUnavailable` |
 
 ## Events
 
