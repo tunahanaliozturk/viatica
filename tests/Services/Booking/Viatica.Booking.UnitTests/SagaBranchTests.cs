@@ -379,6 +379,28 @@ public sealed class SagaBranchTests
     }
 
     [Fact]
+    public void A_checkout_repeated_changes_nothing_and_one_with_another_body_is_a_conflict()
+    {
+        var t = new TripScenario();
+        Guid payment = Guid.CreateVersion7();
+
+        CheckoutResult first = t.Trip.Checkout("fingerprint-a", "sealed-a", payment, t.Now, SagaTimings.Default);
+        int revision = t.Trip.Revision;
+        CheckoutResult again = t.Trip.Checkout("fingerprint-a", "sealed-a", Guid.CreateVersion7(), t.Now.AddSeconds(5), SagaTimings.Default);
+        CheckoutResult other = t.Trip.Checkout("fingerprint-b", "sealed-b", Guid.CreateVersion7(), t.Now.AddSeconds(6), SagaTimings.Default);
+
+        first.Outcome.ShouldBe(CheckoutOutcome.Started);
+        first.Directives.OfType<RequestStayHold>().ShouldHaveSingleItem();
+        again.Outcome.ShouldBe(CheckoutOutcome.Repeated);
+        again.Directives.ShouldBeEmpty();
+        other.Outcome.ShouldBe(CheckoutOutcome.Conflict);
+        other.Directives.ShouldBeEmpty();
+        t.Trip.Revision.ShouldBe(revision);
+        t.Trip.PaymentId.ShouldBe(payment, "the payment id of the first request stands");
+        t.Trip.CheckoutFingerprint.ShouldBe("fingerprint-a");
+    }
+
+    [Fact]
     public void An_expired_quote_stops_the_checkout_before_anything_is_sent()
     {
         var t = new TripScenario();

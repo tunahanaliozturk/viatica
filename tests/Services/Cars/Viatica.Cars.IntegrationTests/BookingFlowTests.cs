@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Viatica.Cars.Domain;
 using Viatica.Contracts;
@@ -64,6 +65,31 @@ public sealed class BookingFlowTests(PostgresFixture postgres, KafkaFixture kafk
         await AnswerAsync("CarBookingCancelled", hold);
         (await host.DaysAsync(m, "2026-12-07", "2026-12-08")).Select(static d => (d.Held, d.Sold)).ShouldBe([(0, 0), (0, 0)]);
         await host.AssertInventoryIsConsistentAsync(m);
+    }
+
+    [Fact]
+    public async Task A_placed_hold_carries_the_partner_the_pick_up_and_the_cancellation_policy_in_force_for_Booking()
+    {
+        Marketplace m = await Scenario.ArrangeAsync(host, allotment: 2, rate: 40m);
+        string token = await Scenario.TokenAsync(host.Anonymous(), m, Monday, Monday.AddHours(48));
+        var request = new CarHoldRequested(Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), token, 35);
+
+        await booking.SendAsync(request);
+        ProbedMessage placed = await AnswerAsync("CarHoldPlaced", request.HoldId);
+
+        JsonElement terms = placed.Data.GetProperty("terms");
+        terms.GetProperty("partnerId").GetGuid().ShouldBe(m.PartnerId);
+        terms.GetProperty("startsAt").GetDateTimeOffset().ShouldBe(Monday);
+        terms.GetProperty("cancellationPolicy").GetProperty("freeUntilHoursBeforeStart").GetInt32().ShouldBe(48);
+        terms.GetProperty("cancellationPolicy").GetProperty("penaltyAfter").GetString().ShouldBe("FirstUnit", "the first day of a rental is the first unit");
+
+        // The same request again is answered again, and the answer carries the terms as well.
+        await booking.SendAsync(request);
+        IReadOnlyList<ProbedMessage> answers = await host.Probe.WaitForCountAsync(2, e => e.Type == "CarHoldPlaced" && e.DataString("holdId") == request.HoldId.ToString());
+        foreach (ProbedMessage answer in answers)
+        {
+            answer.Data.TryGetProperty("terms", out _).ShouldBeTrue();
+        }
     }
 
     [Fact]

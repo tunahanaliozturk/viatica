@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\src\Services\Booking\Viatica.Booking.Domain\Viatica.Booking.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Services\Booking\Viatica.Booking.Application\Viatica.Booking.Application.csproj" />
   </ItemGroup>
 
 </Project>
