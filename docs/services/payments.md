@@ -231,7 +231,7 @@ provider call.
 
 ## What proves it
 
-Unit tests (80, no containers) and integration tests (55, real Postgres and Kafka, the real simulator in process and a
+Unit tests (87, no containers) and integration tests (58, real Postgres and Kafka, the real simulator in process and a
 Booking stand-in that writes to `booking.v1` through an outbox). Run them with
 `dotnet run --project tests/Services/Payments/Viatica.Payments.UnitTests` and `...IntegrationTests` (Docker must be
 running). The simulator has its own, 51 unit and 23 integration tests (`docs/psp-sim.md`).
