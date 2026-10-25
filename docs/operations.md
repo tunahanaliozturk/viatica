@@ -29,6 +29,9 @@ and none of them may be reused in any other environment.
 | `dashboard` | `mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1` | 18888 (UI), 4317 (OTLP gRPC), 4318 (OTLP HTTP) | none | OpenTelemetry sink: traces, metrics and logs from every service |
 | `stays-migrate` | built from `src/Services/Stays` | none | `stays` role | One-shot: applies the Stays migrations, then exits 0 |
 | `stays` | built from `src/Services/Stays` | 8101 | tokens from Keycloak, audience `stays-api` | The Stays service: catalogue, rates, quotes and holds (`docs/services/stays.md`) |
+| `psp-sim` | built from `src/Simulators/Viatica.PspSim` | 8202 | none; its admin API is unauthenticated, never expose it | The payment provider simulator: Stripe shaped, in memory, test cards and failure knobs (`docs/psp-sim.md`) |
+| `payments-migrate` | built from `src/Services/Payments` | none | `payments` role | One-shot: applies the Payments migrations, then exits 0 |
+| `payments` | built from `src/Services/Payments` | 8106 | tokens from Keycloak, audience `payments-api` | The Payments service: card tokens, authorise, capture, void and refund (`docs/services/payments.md`) |
 
 Images are pinned by digest in `compose.yaml`; the table shows the tags.
 
@@ -153,6 +156,45 @@ To be written with Booking (M5).
 ### Airline outage
 
 To be written with Flights (M3).
+
+### Payment provider outage
+
+**Shows up as** `payments.provider.calls` with outcomes other than `200` climbing, `payments.lookups{result="failed"}`
+above zero, `PaymentDeclined` events with the reason `ProviderUnavailable`, and the warning `... could not be resolved
+(...); nothing is decided and the request will be tried again` in the Payments log. A capture, void or refund the
+provider cannot settle is not answered: its trip waits, and the consumer logs `Handler for PaymentCaptureRequested ...
+failed on attempt N of 8`.
+
+**Confirm** whether the provider or Payments is at fault, and where one trip stands:
+
+```bash
+curl -s localhost:8202/health/ready            # the simulator; a real provider has its own status page
+docker compose logs payments | grep -E "could not be resolved|looking the operation up"
+```
+
+```sql
+-- payments database: what was concluded for a trip, and whether the provider's answer had to be looked up
+select kind, result, reason, resolved_by_lookup, created_at
+from payments.payment_operations where trip_id = '<trip id>' order by created_at;
+```
+
+- Authorisations declined as `ProviderUnavailable`: nothing was held. Booking fails those trips and the traveller tries
+  again. Nothing to repair.
+- Captures, voids and refunds without an outcome: each is retried up to eight times over about a minute, under the same
+  idempotency key, and asks the provider what it recorded before it decides. When the provider is back they conclude
+  by themselves, once. `resolved_by_lookup = true` marks the ones where the provider had done the work and only the
+  answer was lost.
+- `lookups{result="failed"}` while operations work: the lookup alone is down. Operations are still retried, and none is
+  decided until it answers.
+
+**Recover** a request that ran out of attempts (a message on `booking.v1.dlq` of type `PaymentCaptureRequested`,
+`PaymentVoidRequested` or `PaymentRefundRequested`) once the provider is back: put it on `booking.v1` again with its
+key and value unchanged. A replay is safe, because the operation's key makes it the same operation at the provider
+and the operation record here makes a second conclusion impossible. For a drill against the simulator, `PATCH
+/admin/knobs` with `{ "Outage": true }` and `POST /admin/knobs/reset` afterwards (`docs/psp-sim.md`).
+
+**Never** capture or refund by hand at the provider without the operation's key: the next retry would not know the
+money had moved, and the provider could take it twice.
 
 ### Projection lag
 
