@@ -14,15 +14,19 @@
 name: viatica
 
 # Settings the Flights host and its migrate one-shot share. The migrate step builds the same host, so it needs the same
-# connection strings and keys even though it only touches the database. The passenger key is the one Booking will
-# hold too (docs/design.md, "Personal data on the broker"); both keys are public development values.
+# connection strings and keys even though it only touches the database. Both keys are public development values; the
+# passenger key is the anchor above, shared with Booking, and the storage key is Flights' alone.
+# The passenger key is one value for both services that hold it, so they cannot drift apart: Booking seals the passenger
+# list with it and Flights opens it (docs/design.md, "Personal data on the broker"). Public development value.
+x-passenger-key: &passenger-key dmlhdGljYS1kZXYtcGFzc2VuZ2VyLWtleS0wMDAwMDA=
+
 x-flights-environment: &flights-environment
   ConnectionStrings__Flights: Host=postgres;Port=5432;Database=flights;Username=flights;Password=flights
   ConnectionStrings__Valkey: valkey:6379
   Kafka__BootstrapServers: kafka:9092
   Viatica__Api__SupportedApiVersions__0: "2026-11-01"
   Viatica__Api__SkipTokenKey: dmlhdGljYS1kZXYtc2tpcHRva2VuLWtleS0wMDAwMDA=
-  Viatica__Pii__PassengerKey: dmlhdGljYS1kZXYtcGFzc2VuZ2VyLWtleS0wMDAwMDA=
+  Viatica__Pii__PassengerKey: *passenger-key
   Viatica__Pii__StorageKey: dmlhdGljYS1kZXYtZmxpZ2h0cy1zdG9yYWdlLWtleSE=
   Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
   # Keycloak is reached over the compose network, which is not https. Never set this outside local development.
@@ -51,6 +55,19 @@ x-payments-environment: &payments-environment
   Viatica__Auth__AllowInsecureMetadata: "true"
   Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
   Payments__Provider__BaseUrl: http://psp-sim:8080/
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+
+x-booking-environment: &booking-environment
+  ConnectionStrings__Booking: Host=postgres;Port=5432;Database=booking;Username=booking;Password=booking
+  Kafka__BootstrapServers: kafka:9092
+  Viatica__Api__SupportedApiVersions__0: "2026-11-01"
+  Viatica__Api__SkipTokenKey: dmlhdGljYS1kZXYtYm9va2luZy1za2lwdG9rZW4tMDAwMDA=
+  # The first is the key shared with Flights; the second seals traveller data at rest and is Booking's alone.
+  Viatica__Pii__PassengerKey: *passenger-key
+  Viatica__Pii__StorageKey: dmlhdGljYS1kZXYtYm9va2luZy1zdG9yYWdlLWtleSE=
+  Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+  Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+  Viatica__Auth__AllowInsecureMetadata: "true"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
 
 services:
@@ -453,6 +470,21 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
+  # --- Booking (port 8105) ----------------------------------------------------------------------------------------
+  # The checkout saga. It depends on Postgres and the topics only: Stays, Cars, Flights and Payments answer it over
+  # Kafka whenever they are up, and a trip that finds one down unwinds at its deadline instead of waiting for it.
+
+  booking-migrate:
+    build:
+      context: .
+      dockerfile: src/Services/Booking/Viatica.Booking.Api/Dockerfile
+    image: viatica/booking:dev
+    command: ["migrate"]
+    environment: *booking-environment
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
   payments:
     image: viatica/payments:dev
     environment: *payments-environment
@@ -465,6 +497,23 @@ services:
     healthcheck:
       # The service asks its own port; the runtime image has no curl or wget (see Program.cs, "healthcheck").
       test: ["CMD", "dotnet", "Viatica.Payments.Api.dll", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+      start_interval: 2s
+
+  booking:
+    image: viatica/booking:dev
+    environment: *booking-environment
+    ports: ["8105:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      booking-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      # The service asks its own port; the runtime image has no curl or wget (see Program.cs, "healthcheck").
+      test: ["CMD", "dotnet", "Viatica.Booking.Api.dll", "healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 12

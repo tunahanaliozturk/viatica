@@ -77,7 +77,8 @@ public sealed record CarHoldPlaced(
     DateTimeOffset PickUpAt,
     DateTimeOffset DropOffAt,
     Price Total,
-    DateTimeOffset ExpiresAt) : IIntegrationEvent
+    DateTimeOffset ExpiresAt,
+    HoldTerms? Terms = null) : IIntegrationEvent
 {
     [JsonIgnore]
     public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);

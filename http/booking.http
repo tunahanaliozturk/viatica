@@ -1,0 +1,154 @@
+# Booking, in the order a reader would try it. Start the stack (docker compose up -d --wait) and open this file in
+# VS Code with the REST Client extension, or in a JetBrains IDE. Every request carries api-version.
+#
+# A trip holds stays, cars and flights. You get a stay's or a car's quote token from Stays or Cars
+# (http/stays.http, http/cars.http) and a flight's offer id by re-pricing an offer (http/flights.http). Paste them
+# below; the tokens here are placeholders, so those requests answer 400 until you replace them.
+#
+# The people are in the Keycloak realm: traveller1 and traveller2 are travellers, partner-stays1 and partner-cars1 are
+# partners (each token carries a partnerId), admin1 is an admin. Their password is "viatica".
+
+@booking = http://localhost:8105
+@keycloak = http://localhost:8080/realms/viatica/protocol/openid-connect/token
+@v = api-version=2026-11-01
+
+# Ids are chosen by the client, so every creation below can be sent twice. Change them for a fresh trip.
+@tripId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9a01
+@stayItemId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9a02
+@carItemId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9a03
+@flightItemId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9a04
+@anonymousTripId = 0192f0c4-7a3b-7cde-8f00-4f7c2b1d9a05
+
+# Make up your own for an anonymous trip: 22 to 128 characters that only you know.
+@accessKey = replace-me-with-a-long-random-string
+
+### 1. Sign in as a traveller. Later requests read the token from here.
+# @name travellerLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=traveller1&password=viatica
+
+@travellerToken = {{travellerLogin.response.body.access_token}}
+
+### 2. Start a draft trip. PUT with your own id: sending it again answers 200 with the same trip instead of 201.
+PUT {{booking}}/trips/{{tripId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 3. Add a stay. It carries the quote token Stays issued; Booking reads the dates, the rooms and the price from it.
+# The same item again answers 200. The same item id with another quote is 409 ItemConflict.
+PUT {{booking}}/trips/{{tripId}}/items/{{stayItemId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "kind": "Stay", "quoteToken": "paste-the-quote-token-from-stays.signature" }
+
+### 4. Add a rental car, with the token Cars issued. The driver's age is in the token, and Cars refuses another one.
+PUT {{booking}}/trips/{{tripId}}/items/{{carItemId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "kind": "Car", "quoteToken": "paste-the-quote-token-from-cars.signature" }
+
+### 5. Add a flight: the offer id that POST /flights/offers/{id}/price returned, and the total the traveller was shown.
+PUT {{booking}}/trips/{{tripId}}/items/{{flightItemId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{
+  "kind": "Flight",
+  "offerId": "paste-the-repriced-offer-id",
+  "expectedTotal": { "amount": "218.88", "currency": "EUR" },
+  "description": "IST to LHR, 1 December"
+}
+
+### 6. Read the trip: its items, their states, what it costs now. The ETag is the row version.
+GET {{booking}}/trips/{{tripId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 7. Take an item out of the draft. Removing one that is not there is not an error.
+DELETE {{booking}}/trips/{{tripId}}/items/{{carItemId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 8. Check out. The trip id is the idempotency key: send it again with the same body and nothing happens twice;
+# send another body and it is 409 CheckoutConflict. The answer is 202 with an Operation-Location to poll.
+# The passenger list is sealed before it leaves for Flights, and the traveller details are erased when the saga ends.
+PUT {{booking}}/trips/{{tripId}}/checkout?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{
+  "contact": { "email": "ada@example.test", "phone": "+441234567890" },
+  "passengers": [
+    { "type": "Adult", "givenName": "Ada", "surname": "Lovelace", "birthDate": "1985-12-10", "documentNumber": "P1234567" }
+  ],
+  "paymentMethodToken": "paste-a-token-from-payments"
+}
+
+### 9. Where the checkout stands: NotStarted, Running, Succeeded, or Failed with the reason.
+GET {{booking}}/operations/{{tripId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 10. Or watch it: server sent events, one per change, until the checkout ends. Last-Event-ID resumes a dropped stream.
+GET {{booking}}/trips/{{tripId}}/events?{{v}}
+Authorization: Bearer {{travellerToken}}
+Accept: text/event-stream
+
+### 11. Cancel one item of a confirmed trip. Its own policy decides the refund: free up to the policy's hours before it
+# starts, then the penalty (first night or day kept, or everything); a flight refunds what the fare rules say.
+# 202 with an Operation-Location; asking again changes nothing.
+POST {{booking}}/trips/{{tripId}}/items/{{stayItemId}}/cancel?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 12. Where the cancellation stands. The id is the item's.
+GET {{booking}}/operations/{{stayItemId}}?{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 13. My trips, newest first. Follow nextLink exactly as returned; $filter works on status, createdAt and updatedAt.
+GET {{booking}}/trips?$top=10&{{v}}
+Authorization: Bearer {{travellerToken}}
+
+### 14. Someone else's trip is not there: 404, never 403. Sign in as traveller2 and ask for traveller1's trip.
+# @name otherLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=traveller2&password=viatica
+
+@otherToken = {{otherLogin.response.body.access_token}}
+
+###
+GET {{booking}}/trips/{{tripId}}?{{v}}
+Authorization: Bearer {{otherToken}}
+
+### 15. An anonymous trip: no token, a key of your own making. Only a hash of it is kept.
+PUT {{booking}}/trips/{{anonymousTripId}}?{{v}}
+Trip-Access-Key: {{accessKey}}
+
+###
+GET {{booking}}/trips/{{anonymousTripId}}?{{v}}
+Trip-Access-Key: {{accessKey}}
+
+### 16. Sign in and claim it, with the key as proof. The key stops working once the trip is yours.
+POST {{booking}}/trips/{{anonymousTripId}}/claim?{{v}}
+Authorization: Bearer {{travellerToken}}
+Trip-Access-Key: {{accessKey}}
+
+### 17. A partner's bookings against their own inventory (confirmed and cancelled stays and cars), keyset paged.
+# @name partnerLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=partner-stays1&password=viatica
+
+@partnerToken = {{partnerLogin.response.body.access_token}}
+
+###
+GET {{booking}}/partner/bookings?$top=20&$filter=kind eq 'Stay'&{{v}}
+Authorization: Bearer {{partnerToken}}
+
+### 18. The OpenAPI document and the health probes need no token and no api-version.
+GET {{booking}}/openapi/v1.json
+
+###
+GET {{booking}}/health/ready

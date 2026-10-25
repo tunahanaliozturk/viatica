@@ -8,7 +8,7 @@ using Viatica.Stays.Domain;
 
 namespace Viatica.Stays.Application.Features.Holds;
 
-public sealed record HoldPlaced(Hold Hold);
+public sealed record HoldPlaced(Hold Hold, HoldTerms Terms);
 
 public sealed record SoldOut;
 
@@ -24,6 +24,27 @@ public sealed record QuoteInvalid;
 /// <see cref="StayHoldPlaced"/> or <see cref="StayHoldRejected"/>.
 /// </summary>
 public union HoldOutcome(HoldPlaced, SoldOut, NotBookable, QuoteExpired, QuoteInvalid);
+
+/// <summary>What the property said when the hold was placed: whose it is, when check-in opens, and the cancellation policy.</summary>
+internal sealed record PropertyTerms(
+    PropertyStatus Status, Guid PartnerId, TimeOnly CheckInFrom, int FreeCancellationHours, Domain.CancellationPenalty Penalty)
+{
+    /// <summary>
+    /// Properties have no time zone yet, so check-in is the date at the property's check-in time, read as UTC. Booking
+    /// uses it to decide whether a cancellation is still free.
+    /// </summary>
+    public HoldTerms ToTerms(DateOnly checkIn) => new(
+        PartnerId,
+        new DateTimeOffset(checkIn.ToDateTime(CheckInFrom), TimeSpan.Zero),
+        new Contracts.CancellationPolicy(
+            FreeCancellationHours,
+            Penalty switch
+            {
+                Domain.CancellationPenalty.FirstUnit => Contracts.CancellationPenalty.FirstUnit,
+                Domain.CancellationPenalty.FullAmount => Contracts.CancellationPenalty.FullAmount,
+                _ => throw new InvalidOperationException("Unknown cancellation penalty."),
+            }));
+}
 
 /// <summary>
 /// Booking asks for a hold with a quote token. The token is checked, then every night of the stay is reserved in one
@@ -54,7 +75,7 @@ public sealed class PlaceHoldHandler(
                 db.Publish(new StayHoldPlaced(
                     placed.Hold.Id, placed.Hold.TripId, placed.Hold.ItemId, placed.Hold.PropertyId, placed.Hold.RoomTypeId,
                     placed.Hold.CheckIn, placed.Hold.CheckOut, placed.Hold.Quantity,
-                    new Price(placed.Hold.Total, Money.Euro), placed.Hold.ExpiresAt));
+                    new Price(placed.Hold.Total, Money.Euro), placed.Hold.ExpiresAt, placed.Terms));
                 StaysTelemetry.HoldsPlaced.Add(1);
                 break;
 
@@ -98,11 +119,15 @@ public sealed class PlaceHoldHandler(
 
         Guid roomTypeId = quote.RoomTypeId;
         Guid propertyId = quote.PropertyId;
-        PropertyStatus? status = await db.RoomTypes.AsNoTracking()
+        PropertyTerms? property = await db.RoomTypes.AsNoTracking()
             .Where(r => r.Id == roomTypeId && r.PropertyId == propertyId)
-            .Select(static r => r.Property == null ? (PropertyStatus?)null : r.Property.Status)
+            .Select(static r => r.Property == null
+                ? null
+                : new PropertyTerms(
+                    r.Property.Status, r.Property.PartnerId, r.Property.CheckInFrom,
+                    r.Property.FreeCancellationHours, r.Property.PenaltyAfterFreeCancellation))
             .SingleOrDefaultAsync(cancellationToken);
-        if (status != PropertyStatus.Published)
+        if (property is not { Status: PropertyStatus.Published })
         {
             return new NotBookable();
         }
@@ -120,7 +145,7 @@ public sealed class PlaceHoldHandler(
         db.Holds.Add(hold);
 
         await ledger.PublishAvailabilityAsync(hold, cancellationToken);
-        return new HoldPlaced(hold);
+        return new HoldPlaced(hold, property.ToTerms(quote.Dates.CheckIn));
     }
 
     private void Reject(StayHoldRequested request, HoldRejectionReason reason)

@@ -8,6 +8,12 @@
   <Folder Name="/src/Contracts/">
     <Project Path="src/Contracts/Viatica.Contracts/Viatica.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Booking/">
+    <Project Path="src/Services/Booking/Viatica.Booking.Api/Viatica.Booking.Api.csproj" />
+    <Project Path="src/Services/Booking/Viatica.Booking.Application/Viatica.Booking.Application.csproj" />
+    <Project Path="src/Services/Booking/Viatica.Booking.Domain/Viatica.Booking.Domain.csproj" />
+    <Project Path="src/Services/Booking/Viatica.Booking.Infrastructure/Viatica.Booking.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/Services/Cars/">
     <Project Path="src/Services/Cars/Viatica.Cars.Api/Viatica.Cars.Api.csproj" />
     <Project Path="src/Services/Cars/Viatica.Cars.Application/Viatica.Cars.Application.csproj" />
@@ -45,6 +51,10 @@
   <Folder Name="/src/Simulators/">
     <Project Path="src/Simulators/Viatica.AirlineSim/Viatica.AirlineSim.csproj" />
     <Project Path="src/Simulators/Viatica.PspSim/Viatica.PspSim.csproj" />
+  </Folder>
+  <Folder Name="/tests/Services/Booking/">
+    <Project Path="tests/Services/Booking/Viatica.Booking.IntegrationTests/Viatica.Booking.IntegrationTests.csproj" />
+    <Project Path="tests/Services/Booking/Viatica.Booking.UnitTests/Viatica.Booking.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/Services/Flights/">
     <Project Path="tests/Services/Flights/Viatica.Flights.IntegrationTests/Viatica.Flights.IntegrationTests.csproj" />

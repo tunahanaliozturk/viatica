@@ -107,9 +107,11 @@ Draft ──checkout──> Holding ──all held──> Authorizing ──auth
                      Failed                                                                            Confirmed
 ```
 
-- `Ticketing` is skipped when the trip has no flight; `Committing` when it has no stay or car.
+- `Ticketing` is skipped when the trip has no flight; `Committing` when it has no stay or car. A confirmed trip whose
+  items were all cancelled afterwards is `Cancelled`.
 - **Deadline.** On entering `Holding` the trip records `deadline = min(hold expiries, ticketing time limits) - 2
-  minutes`, recomputed as holds and orders report back. A trip still before `Committing` at its deadline goes to
+  minutes`, recomputed as holds and orders report back (an item that has not reported counts as expiring 15 minutes after
+  the checkout began). A trip still before `Committing` at its deadline goes to
   `Unwinding` with `DeadlineReached`. A scheduled check in Booking drives this; it does not depend on any event
   arriving.
 - **Unwinding** sends a release, void or void-request for every item that is held, ordered or authorised, and
@@ -161,7 +163,7 @@ codes live in `Viatica.Kernel`. Service codes start with these:
 | Stays | `PropertyNotFound`, `RoomTypeNotFound`, `PropertyNotPublished`, `StayTooLong`, `CheckOutBeforeCheckIn`, `OccupancyExceeded`, `SoldOut`, `QuoteExpired`, `QuoteInvalid` |
 | Cars | `LocationNotFound`, `CategoryNotFound`, `OneWayNotAllowed`, `DriverTooYoung`, `LocationClosed`, `SoldOut`, `QuoteExpired`, `QuoteInvalid` |
 | Flights | `SearchExpired`, `OfferExpired`, `PriceChanged`, `InvalidPassengers`, `NoSuppliersAvailable` |
-| Booking | `TripNotFound`, `TripNotEditable`, `ItemNotFound`, `ItemNotCancellable`, `CheckoutInProgress` |
+| Booking | `TripNotFound`, `TripNotEditable`, `ItemNotFound`, `ItemNotCancellable`, `CheckoutInProgress`, and the ones the service added (`TripEmpty`, `TripFull`, `CheckoutConflict`, `ItemConflict`, `QuoteExpired`, `QuoteInvalid`, `TripAlreadyExists`, `AccessKeyRequired`); the list is `docs/api/errors.md` |
 | Payments | `PaymentMethodInvalid`, `PaymentNotFound`, `ProviderUnavailable` |
 
 ## Events
@@ -169,6 +171,10 @@ codes live in `Viatica.Kernel`. Service codes start with these:
 `src/Contracts/Viatica.Contracts` is the catalogue: every record, its topic (`EventCatalog`) and its JSON
 (snapshots under `tests/Viatica.Contracts.UnitTests/Snapshots`). Rules:
 
+- `StayHoldPlaced` and `CarHoldPlaced` carry an optional `Terms` (partner, start, cancellation policy as it stood at the
+  hold): what Booking needs to refund by the policy in force and to list a partner's bookings.
+- Booking publishes every state change as `TripStateChanged`, `TripItemStateChanged` and `TripClaimed`, besides the
+  requests and the end states. They carry no instruction; nothing has to consume them.
 - Adding an optional field or a new event is fine. Renaming, removing or retyping a field is a breaking change:
   add a new record instead and keep consuming the old one until no producer sends it.
 - Listing events (`StayListingUpdated`, `CarLocationUpdated`) are full snapshots with `ListingVersion`;
@@ -179,4 +185,4 @@ codes live in `Viatica.Kernel`. Service codes start with these:
 ## Decisions
 
 Recorded under `docs/adr/`. The ones this document leans on: 0001 (unions for outcomes, not for the wire), 0002
-(how events are shaped and where they go).
+(how events are shaped and where they go), 0006 (the order of the checkout saga and the alternatives that lost).

@@ -61,6 +61,24 @@ public sealed class HoldTests(StaysFixture stays) : IClassFixture<StaysFixture>
     }
 
     [Fact]
+    public async Task A_placed_hold_carries_the_partner_the_check_in_and_the_cancellation_policy_in_force_for_Booking()
+    {
+        using EventProbe probe = stays.Probe();
+        var scenario = await Scenario.CreateAsync(Host, allotment: 10);
+        Quote quote = await scenario.QuoteAsync();
+        StayHoldRequested request = Scenario.HoldRequest(quote.QuoteToken);
+
+        await Booking.SendAsync(request);
+        ProbedMessage placed = await probe.WaitForAsync(m => IsAbout(m, "StayHoldPlaced", request.HoldId));
+
+        System.Text.Json.JsonElement terms = placed.Data.GetProperty("terms");
+        terms.GetProperty("partnerId").GetGuid().ShouldBe(scenario.PartnerId);
+        terms.GetProperty("startsAt").GetDateTimeOffset().ShouldBe(new DateTimeOffset(2026, 12, 1, 15, 0, 0, TimeSpan.Zero), "check-in day at the property's check-in time, read as UTC");
+        terms.GetProperty("cancellationPolicy").GetProperty("freeUntilHoursBeforeStart").GetInt32().ShouldBe(48);
+        terms.GetProperty("cancellationPolicy").GetProperty("penaltyAfter").GetString().ShouldBe("FirstUnit");
+    }
+
+    [Fact]
     public async Task A_hold_announces_the_new_availability_with_a_higher_version()
     {
         using EventProbe probe = stays.Probe();

@@ -143,3 +143,60 @@ public sealed record TripItemCancelled(Guid TripId, Guid ItemId, Price Refund) :
     [JsonIgnore]
     public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);
 }
+
+// State changes, so that everything that happens to a trip is on the topic and not only how it ends (BKG-6). Added
+// after the first contracts: they carry no instruction, nobody has to consume them, and the saga does not read them.
+// They are named State and not Status so the Booking domain's own enums can use the shorter names unambiguously.
+
+public enum TripState
+{
+    Draft,
+    Holding,
+    Authorizing,
+    Ticketing,
+    Committing,
+    Capturing,
+    Confirmed,
+    Unwinding,
+    Failed,
+    Cancelled,
+}
+
+public enum TripItemState
+{
+    Pending,
+    Held,
+    Ordered,
+    Ticketed,
+    Committed,
+    Rejected,
+    Released,
+    Expired,
+    Voided,
+
+    /// <summary>The traveller asked to cancel a confirmed item and its owner has not answered yet.</summary>
+    CancelRequested,
+    Cancelled,
+
+    /// <summary>The item was taken out of a draft trip.</summary>
+    Removed,
+}
+
+public sealed record TripStateChanged(Guid TripId, Guid? TravellerId, TripState State, DateTimeOffset At) : IIntegrationEvent
+{
+    [JsonIgnore]
+    public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);
+}
+
+public sealed record TripItemStateChanged(Guid TripId, Guid ItemId, TripItemKind Kind, TripItemState State, DateTimeOffset At) : IIntegrationEvent
+{
+    [JsonIgnore]
+    public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);
+}
+
+/// <summary>A traveller who signed in took the trip they had built anonymously.</summary>
+public sealed record TripClaimed(Guid TripId, Guid TravellerId) : IIntegrationEvent
+{
+    [JsonIgnore]
+    public string PartitionKey => TripId.ToString("N", CultureInfo.InvariantCulture);
+}

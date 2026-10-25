@@ -33,6 +33,18 @@ public enum CancellationPenalty
     FullAmount,
 }
 
+/// <summary>
+/// What Booking needs to know about a hold once it is placed, and cannot get from the hold alone: whose inventory it
+/// is (so a partner can list their bookings), when the stay or rental starts, and the cancellation policy that was
+/// in force when the hold was placed (so a policy changed later does not change what an earlier booking refunds).
+/// </summary>
+/// <param name="PartnerId">The partner who owns the property or the rental location.</param>
+/// <param name="StartsAt">
+/// Check-in (the date at the property's check-in time, read as UTC until properties have a time zone) or pick-up.
+/// </param>
+/// <param name="CancellationPolicy">Copied from the property or the location at the moment of the hold.</param>
+public sealed record HoldTerms(Guid PartnerId, DateTimeOffset StartsAt, CancellationPolicy CancellationPolicy);
+
 /// <summary>Why a stay or car hold was refused.</summary>
 public enum HoldRejectionReason
 {

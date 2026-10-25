@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    The real Booking host on Testcontainers Postgres and Kafka. Stays, Cars, Flights and Payments are stand-ins that
+    read booking.v1 and answer on their own topics through an outbox, so Booking hears real envelopes from real topics.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Booking\Viatica.Booking.Api\Viatica.Booking.Api.csproj" />
+    <ProjectReference Include="..\..\..\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

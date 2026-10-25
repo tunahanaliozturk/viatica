@@ -68,6 +68,9 @@ public static class EventCatalog
         [typeof(TripConfirmed)] = Topics.Booking,
         [typeof(TripFailed)] = Topics.Booking,
         [typeof(TripItemCancelled)] = Topics.Booking,
+        [typeof(TripStateChanged)] = Topics.Booking,
+        [typeof(TripItemStateChanged)] = Topics.Booking,
+        [typeof(TripClaimed)] = Topics.Booking,
 
         [typeof(PaymentAuthorized)] = Topics.Payments,
         [typeof(PaymentDeclined)] = Topics.Payments,
