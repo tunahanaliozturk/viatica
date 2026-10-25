@@ -35,20 +35,24 @@ internal sealed class BookingHost : WebApplicationFactory<Program>
 
     private readonly Dictionary<string, string?> settings;
 
-    private BookingHost(Dictionary<string, string?> settings, FakeTimeProvider clock, CapturedLogs logs)
+    private BookingHost(Dictionary<string, string?> settings, FakeTimeProvider clock, CapturedLogs logs, byte[] passengerKey, byte[] storageKey)
     {
         this.settings = settings;
         Clock = clock;
         Logs = logs;
+        PassengerKey = passengerKey;
+        StorageKey = storageKey;
     }
 
     public FakeTimeProvider Clock { get; }
 
     public CapturedLogs Logs { get; }
 
-    public byte[] PassengerKey { get; } = RandomNumberGenerator.GetBytes(PiiSealer.KeyLength);
+    /// <summary>The key Booking shares with Flights. The stand-in for Flights holds the same one.</summary>
+    public byte[] PassengerKey { get; }
 
-    public byte[] StorageKey { get; } = RandomNumberGenerator.GetBytes(PiiSealer.KeyLength);
+    /// <summary>Booking's own key for traveller data at rest.</summary>
+    public byte[] StorageKey { get; }
 
     public static async Task<BookingHost> StartAsync(PostgresFixture postgres, FakeTimeProvider clock, BookingTopics topics, string bootstrap, byte[] passengerKey, byte[] storageKey)
     {
@@ -78,7 +82,7 @@ internal sealed class BookingHost : WebApplicationFactory<Program>
             ["Booking:ProgressPollInterval"] = "00:00:00.100",
         };
 
-        var host = new BookingHost(settings, clock, new CapturedLogs());
+        var host = new BookingHost(settings, clock, new CapturedLogs(), passengerKey, storageKey);
         _ = host.Services; // starts the host, and with it the relay, the four consumers and the scheduled check
         return host;
     }
@@ -384,7 +388,7 @@ internal sealed class BookingWorld : IAsyncDisposable
 
     // Quote tokens as the owners issue them: readable payload, a signature Booking does not check.
 
-    public string StayQuote(decimal total)
+    public string StayQuote(decimal total, DateTimeOffset? expiresAt = null)
     {
         DateOnly checkIn = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime).AddDays(30);
         return Token(new Dictionary<string, object?>
@@ -397,7 +401,7 @@ internal sealed class BookingWorld : IAsyncDisposable
             ["checkOut"] = checkIn.AddDays(3).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["quantity"] = 1,
             ["total"] = new { amount = total.ToString("0.00", CultureInfo.InvariantCulture), currency = "EUR" },
-            ["expiresAt"] = Clock.GetUtcNow().AddMinutes(15),
+            ["expiresAt"] = expiresAt ?? Clock.GetUtcNow().AddMinutes(15),
         });
     }
 
