@@ -98,14 +98,22 @@ public sealed class CheckoutTests(WorldFixture fixture) : IClassFixture<WorldFix
     {
         (Guid trip, _, _, _) = await world.BasketAsync();
 
+        // Held at capture for a moment, so the stream has a state to send that is neither the first nor the last. A stream
+        // sends the latest state each time it looks, so which of the quicker states it catches depends on timing.
+        world.Owners.Pause<PaymentCaptureRequested>();
         Task<IReadOnlyList<(int Id, JsonElement Trip)>> reading = world.ReadProgressAsync(trip);
         await world.CheckoutAsync(trip);
+        await world.WaitForTripAsync(trip, "Capturing");
+        await Task.Delay(500);
+        await world.Owners.ResumeAsync<PaymentCaptureRequested>();
         IReadOnlyList<(int Id, JsonElement Trip)> events = await reading;
 
         events.Select(static e => e.Id).ShouldBe(events.Select(static e => e.Id).Order(), "event ids are the trip's revisions and only go up");
         events.Select(static e => e.Id).Distinct().Count().ShouldBe(events.Count);
         events[^1].Trip.GetProperty("status").GetString().ShouldBe("Confirmed");
-        events.Select(static e => e.Trip.GetProperty("status").GetString()).ShouldContain("Holding");
+        string?[] statuses = [.. events.Select(static e => e.Trip.GetProperty("status").GetString())];
+        statuses.ShouldContain("Capturing", "the state the trip waited in");
+        statuses[0].ShouldNotBe("Confirmed", "it began before the end");
 
         // A client that reconnects with the last event it had is sent nothing and the stream closes.
         (await world.ReadProgressAsync(trip, events[^1].Id)).ShouldBeEmpty();
