@@ -83,15 +83,38 @@ public sealed class SearchApp(OpenSearchFixture opensearch, KafkaFixture kafka) 
     }
 
     /// <summary>Empties both indices, so each test starts without the previous one's properties.</summary>
+    /// <remarks>
+    /// The previous test's projection can still be writing. A document changed between the delete's snapshot and its
+    /// delete is a version conflict, which by default fails the whole call with 409 (seen on CI). Conflicts are
+    /// counted instead, and the delete runs again on a refreshed index until a pass meets none.
+    /// </remarks>
     public async Task ResetAsync()
     {
-        foreach (string alias in (string[])[IndexDefinitions.Stays, IndexDefinitions.Cars])
+        for (int pass = 1; ; pass++)
         {
-            using JsonDocument _ = await Rest.SendAsync(
-                OpenSearch.Net.HttpMethod.POST, $"{alias}/_delete_by_query", """{ "query": { "match_all": {} } }""", CancellationToken.None);
-        }
+            await RefreshAsync();
+            long conflicts = 0;
+            foreach (string alias in (string[])[IndexDefinitions.Stays, IndexDefinitions.Cars])
+            {
+                using JsonDocument result = await Rest.SendAsync(
+                    OpenSearch.Net.HttpMethod.POST,
+                    $"{alias}/_delete_by_query",
+                    """{ "conflicts": "proceed", "query": { "match_all": {} } }""",
+                    CancellationToken.None);
+                conflicts += result.RootElement.GetProperty("version_conflicts").GetInt64();
+            }
 
-        await RefreshAsync();
+            if (conflicts == 0)
+            {
+                await RefreshAsync();
+                return;
+            }
+
+            if (pass == 10)
+            {
+                throw new InvalidOperationException($"The indices still had version conflicts after {pass} passes.");
+            }
+        }
     }
 
     public T Service<T>()
