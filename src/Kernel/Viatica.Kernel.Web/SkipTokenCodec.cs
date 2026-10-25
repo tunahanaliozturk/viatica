@@ -62,6 +62,15 @@ public sealed class SkipTokenCodec
             payloadLength += 2 + Encoding.UTF8.GetByteCount(value);
         }
 
+        // The decoder refuses anything longer than MaxTokenLength, so a longer token would be a nextLink that always
+        // answers InvalidSkipToken. Failing here makes the request that produced it fail instead.
+        if (Base64Url.GetEncodedLength(payloadLength + MacLength) > MaxTokenLength)
+        {
+            throw new ArgumentException(
+                $"The keyset position is too long for a $skiptoken of at most {MaxTokenLength} characters; bound the sortable values.",
+                nameof(position));
+        }
+
         // Layout in one rented buffer: [query hash][payload][mac]. The MAC covers hash and payload; the token is
         // payload and mac, which sit next to each other, so nothing is copied twice.
         byte[] buffer = ArrayPool<byte>.Shared.Rent(HashLength + payloadLength + MacLength);

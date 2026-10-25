@@ -155,6 +155,12 @@ the request and the MAC fails if anything changed. So:
 - a token with any bit changed is refused, so a client cannot write its own position
   (`SkipTokenCodecTests.Every_flipped_bit_is_detected`);
 - the MAC is compared in constant time.
+- a token is at most 2,048 characters, which the decoder enforces and the encoder now does too: a position whose
+  sort values need more than about 1,500 bytes cannot be paged on, and the request that would have produced the link
+  fails with `500 InternalError` instead of returning one that always answers `InvalidSkipToken`
+  (`SkipTokenCodecTests.A_position_too_long_for_a_token_is_refused_instead_of_encoded`,
+  `PagingTests.A_sort_value_too_long_to_page_on_fails_the_request_instead_of_emitting_a_dead_link`). Bound the length
+  of any string a collection sorts on.
 
 The position is not secret, only unforgeable: it holds values the caller already saw on the previous page.
 

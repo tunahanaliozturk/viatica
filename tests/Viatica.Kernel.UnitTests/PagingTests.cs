@@ -146,4 +146,27 @@ public sealed class PagingTests(TestApi api) : IClassFixture<TestApi>
     public async Task Filter_and_ordering_errors_reach_the_client_as_envelopes(string query, string code, string target) =>
         (await (await Client.GetAsync(Http.V($"/stays?{query}"))).ShouldBeError(HttpStatusCode.BadRequest, code))
             .Str("target").ShouldBe(target);
+
+    [Fact]
+    public async Task A_next_link_over_a_long_sort_value_leads_to_the_next_page()
+    {
+        var response = await Client.GetAsync(Http.V("/long-stays/1400?$orderby=city&$top=1"));
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string nextLink = (await response.Body()).Str("nextLink")!;
+
+        var next = await Client.GetAsync(nextLink);
+
+        next.StatusCode.ShouldBe(HttpStatusCode.OK, await next.Content.ReadAsStringAsync());
+        (await next.Body()).GetProperty("value")[0].GetProperty("id").GetInt32().ShouldBe(2);
+    }
+
+    // The link would be longer than the decoder accepts. Failing the request is honest; a link that always answers
+    // InvalidSkipToken is not.
+    [Fact]
+    public async Task A_sort_value_too_long_to_page_on_fails_the_request_instead_of_emitting_a_dead_link()
+    {
+        var response = await Client.GetAsync(Http.V("/long-stays/1600?$orderby=city&$top=1"));
+
+        await response.ShouldBeError(HttpStatusCode.InternalServerError, "InternalError");
+    }
 }
