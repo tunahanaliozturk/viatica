@@ -26,6 +26,8 @@ internal sealed class AirlineSimDb(DbContextOptions<AirlineSimDb> options) : DbC
 {
     public const string IdempotencyKeyIndex = "ux_orders_idempotency_key";
 
+    public const string BookingReferenceIndex = "ux_orders_booking_reference";
+
     public DbSet<Order> Orders => Set<Order>();
 
     public DbSet<SeatBucket> SeatBuckets => Set<SeatBucket>();
@@ -61,6 +63,9 @@ internal sealed class AirlineSimDb(DbContextOptions<AirlineSimDb> options) : DbC
     public static bool IsIdempotencyKeyClash(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: IdempotencyKeyIndex };
 
+    public static bool IsBookingReferenceClash(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: BookingReferenceIndex };
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SeatBucket>(bucket =>
@@ -74,7 +79,7 @@ internal sealed class AirlineSimDb(DbContextOptions<AirlineSimDb> options) : DbC
         {
             order.ToTable("orders");
             order.HasKey(o => o.Id);
-            order.HasIndex(o => new { o.Airline, o.BookingReference }).IsUnique().HasDatabaseName("ux_orders_booking_reference");
+            order.HasIndex(o => new { o.Airline, o.BookingReference }).IsUnique().HasDatabaseName(BookingReferenceIndex);
             order.HasIndex(o => new { o.Airline, o.IdempotencyKey }).IsUnique().HasDatabaseName(IdempotencyKeyIndex);
             order.Property(o => o.Status).HasConversion<string>();
             order.Property(o => o.Version).IsRowVersion();

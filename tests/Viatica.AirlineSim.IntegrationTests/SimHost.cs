@@ -61,12 +61,14 @@ internal sealed class SimHost : WebApplicationFactory<Program>
 
     private readonly string _connectionString;
     private readonly int _seed;
+    private readonly IBookingReferences? _references;
     private HttpClient? _client;
 
-    private SimHost(string connectionString, int seed)
+    private SimHost(string connectionString, int seed, IBookingReferences? references)
     {
         _connectionString = connectionString;
         _seed = seed;
+        _references = references;
     }
 
     public FakeTimeProvider Clock { get; } = new(Start);
@@ -76,9 +78,9 @@ internal sealed class SimHost : WebApplicationFactory<Program>
     public Behaviours Behaviours => Services.GetRequiredService<Behaviours>();
 
     /// <summary>Starts a host with its schema in place. Latency is off unless asked for, to keep the suite fast.</summary>
-    public static async Task<SimHost> StartAsync(Postgres postgres, int seed = DefaultSeed, bool latency = false)
+    public static async Task<SimHost> StartAsync(Postgres postgres, int seed = DefaultSeed, bool latency = false, IBookingReferences? references = null)
     {
-        var host = new SimHost(await postgres.CreateDatabaseAsync(), seed);
+        var host = new SimHost(await postgres.CreateDatabaseAsync(), seed, references);
         await host.InDbAsync(static db => db.Database.EnsureCreatedAsync());
 
         if (!latency)
@@ -119,13 +121,25 @@ internal sealed class SimHost : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:AirlineSim", _connectionString);
         builder.UseSetting("AirlineSim:Seed", _seed.ToString(CultureInfo.InvariantCulture));
         builder.ConfigureLogging(static logging => logging.SetMinimumLevel(LogLevel.Warning));
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Clock);
+            if (_references is not null)
+            {
+                services.AddSingleton(_references);
+            }
+        });
     }
 
     protected override void Dispose(bool disposing)
     {
         _client?.Dispose();
         base.Dispose(disposing);
+
+        // Every host has a database, and so a connection pool of its own, that would otherwise keep its idle
+        // connections for minutes. A few dozen hosts in one run would use up the server's 100.
+        using var connection = new NpgsqlConnection(_connectionString);
+        NpgsqlConnection.ClearPool(connection);
     }
 }
 
