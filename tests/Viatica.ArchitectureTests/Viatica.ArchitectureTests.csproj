@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Services\Flights\Viatica.Flights.Api\Viatica.Flights.Api.csproj" />
     <ProjectReference Include="..\..\src\Services\Stays\Viatica.Stays.Api\Viatica.Stays.Api.csproj" />
     <ProjectReference Include="..\..\src\Services\Search\Viatica.Search.Api\Viatica.Search.Api.csproj" />
+    <ProjectReference Include="..\..\src\Services\Payments\Viatica.Payments.Api\Viatica.Payments.Api.csproj" />
   </ItemGroup>
 
 </Project>
