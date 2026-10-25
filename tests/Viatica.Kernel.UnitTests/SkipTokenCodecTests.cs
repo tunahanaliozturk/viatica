@@ -78,6 +78,56 @@ public sealed class SkipTokenCodecTests
     [Fact]
     public void Normalisation_cannot_be_fooled_by_moving_a_separator() =>
         Query("/stays", "?a=b%26c").ShouldNotBe(Query("/stays", "?a=b&c"));
+
+    // A position of one value of this many bytes makes a token of exactly MaxTokenLength characters; one more byte
+    // does not fit. Whatever Encode returns, TryDecode must accept, so a nextLink never leads to a dead end.
+    [Theory]
+    [InlineData(1500)]
+    [InlineData(1499)]
+    [InlineData(1000)]
+    public void A_token_at_the_size_limit_round_trips(int valueLength)
+    {
+        string[] position = [new string('v', valueLength)];
+        string token = Codec.Encode(position, Lisbon);
+
+        token.Length.ShouldBeLessThanOrEqualTo(SkipTokenCodec.MaxTokenLength);
+        Codec.TryDecode(token, Lisbon, out string[] read).ShouldBeTrue();
+        read.ShouldBe(position);
+    }
+
+    [Fact]
+    public void The_longest_position_makes_a_token_of_exactly_the_limit() =>
+        Codec.Encode([new string('v', 1500)], Lisbon).Length.ShouldBe(SkipTokenCodec.MaxTokenLength);
+
+    [Theory]
+    [InlineData(1501)]
+    [InlineData(1502)]
+    [InlineData(1503)]
+    [InlineData(5000)]
+    public void A_position_too_long_for_a_token_is_refused_instead_of_encoded(int valueLength) =>
+        Should.Throw<ArgumentException>(() => Codec.Encode([new string('v', valueLength)], Lisbon))
+            .Message.ShouldContain("skiptoken");
+
+    [Fact]
+    public void No_position_length_yields_a_token_the_decoder_rejects()
+    {
+        for (int length = 1400; length < 1600; length++)
+        {
+            string[] position = [new string('é', length / 2), "9"];
+            string token;
+            try
+            {
+                token = Codec.Encode(position, Lisbon);
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+
+            Codec.TryDecode(token, Lisbon, out string[] read).ShouldBeTrue($"length {length}");
+            read.ShouldBe(position);
+        }
+    }
 }
 
 internal static class Keys

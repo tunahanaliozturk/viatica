@@ -21,6 +21,8 @@ All notable changes to this project are documented here. The format follows
 - `AddViaticaAuth` refuses an http `Viatica:Auth:Authority` outside Development at start-up unless
   `Viatica:Auth:AllowInsecureMetadata` is true, which `compose.yaml` sets; `RequireHttpsMetadata` no longer depends on
   the authority's scheme (#46).
+- `SkipTokenCodec.Encode` refuses a position that would make a token longer than the 2,048 characters `TryDecode`
+  accepts, instead of emitting a `nextLink` that always answers `InvalidSkipToken` (#47).
 
 ### Added
 

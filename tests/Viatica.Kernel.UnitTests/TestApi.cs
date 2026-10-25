@@ -87,6 +87,14 @@ public sealed class TestApi : IAsyncLifetime
             return http.Page(query.ToPage([.. query.ApplyTo(Stays.Rows.AsQueryable())], static s => new StaySummary(s.Id, s.City, Money.Eur(s.FromPrice))));
         });
 
+        // Three stays whose city is a long string, to page over a sort value that nearly fills a skiptoken.
+        app.MapGet("/long-stays/{length:int}", static (int length, HttpContext http) =>
+        {
+            StayRow[] rows = [.. Enumerable.Range(1, 3).Select(i => new StayRow { Id = i, City = new string('x', length) + i })];
+            CollectionQuery<StayRow> query = http.BindCollectionQuery(Stays.Fields);
+            return http.Page(query.ToPage([.. query.ApplyTo(rows.AsQueryable())], static s => new StaySummary(s.Id, s.City, Money.Eur(s.FromPrice))));
+        });
+
         app.MapGet("/boom", static IResult () => throw new InvalidOperationException("Password=hunter2 on db-primary"));
         app.MapGet("/sold-out", static IResult () => throw ApiErrorException.Conflict("SoldOut", "No rooms left for those nights."));
         app.MapPost("/echo", static (Echo echo) => echo);
