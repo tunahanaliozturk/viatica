@@ -9,7 +9,7 @@ against Stays, Cars, Flights and Payments. It is requirements BKG-1 to BKG-6.
 | Port | 8105 (`booking` in compose, `http/booking.http` has every request) |
 | Store | Postgres database `booking` (trips, items, outbox, inbox) |
 | Publishes | `booking.v1`: the requests to the owners (`StayHoldRequested`, `FlightTicketingRequested`, `PaymentCaptureRequested`, ...), `TripConfirmed`, `TripFailed`, `TripItemCancelled`, and the state changes `TripStateChanged`, `TripItemStateChanged`, `TripClaimed` |
-| Consumes | `stays.v1`, `cars.v1`, `flights.v1`, `payments.v1`: every hold, order and payment outcome (other types on those topics are skipped) |
+| Consumes | `stays.v1`, `cars.v1`, `flights.v1`, `payments.v1`: every hold, order and payment outcome, including `PaymentOperationRefused` (other types on those topics are skipped) |
 | Projects | `Viatica.Booking.{Domain,Application,Infrastructure,Api}`, tests in `tests/Services/Booking` |
 
 The order of the saga, and the alternatives that lost, are ADR 0006. This page is what the service does and where it
@@ -104,6 +104,9 @@ trip's history for anyone who wants it (BKG-6). All are keyed by trip id.
 | A hold arrives after the trip gave up (the owner judged a redelivered request again) | One release for it | `FailureTests.A_hold_that_arrives_after_the_trip_gave_up_on_the_item_is_released_exactly_once` |
 | `FlightOrderCreated` arrives for an item that was rejected, unwound or past its deadline (the airline created the order after a timeout) | One void request | `FailureTests.An_order_that_appears_after_the_trip_gave_up_on_the_flight_is_voided_exactly_once` |
 | `PaymentAuthorized` arrives for a trip that is unwinding or failed | One void | `FailureTests.An_authorisation_that_arrives_after_the_trip_failed_is_voided_exactly_once` |
+| Payments refuses the capture (`PaymentOperationRefused`) | Nothing was taken: the tickets are voided, the committed stays and cars cancelled, the authorisation voided; `TripFailed(PaymentDeclined)`. The capture is not asked for again | `FailureTests.A_capture_that_payments_refuses_gives_everything_back_and_the_trip_fails_instead_of_waiting_for_ever`, `SagaBranchTests.A_refused_capture_gives_back_the_tickets_and_the_rooms_and_voids_the_authorisation` |
+| Payments refuses a void (the payment was declined or never made) | Nothing is left to void; the payment counts as voided | `SagaBranchTests.A_refused_void_means_there_is_nothing_left_to_void_and_a_refused_refund_leaves_the_item_cancelled` |
+| Payments refuses a refund | The item stays cancelled, `refundStatus` is `Refused`, the money is owed and a person settles it | the same test |
 | A void is answered with `FlightOrderCancelled` (the airline's void window had closed) | The item is `Cancelled`; no refund to make, the traveller was never charged | `SagaBranchTests.A_flight_void_answered_as_a_cancellation_closes_the_item_because_the_void_window_had_passed` |
 | A release for a hold the owner never placed is answered `Released` | The speculative release sent to a `Pending` item completes it | `Trip.UnwindItem`, `SagaBranchTests.Reaching_the_deadline_while_holding_unwinds_and_a_hold_that_arrives_later_is_released` |
 | A cancel for an order Flights never made gets no answer | The cancellation times out after 2 minutes, can be asked again, and a late answer is still taken | `CancellationTests.A_cancel_its_owner_never_answers_times_out_can_be_asked_again_and_a_late_answer_still_counts` |
@@ -259,7 +262,8 @@ traveller's (`PriceChanged`), so the traveller never pays a flight price they di
 - **A flight that never answers** keeps an unwinding trip `Unwinding`: a pending order cannot be voided by an id Flights
   has not issued. `FlightOrderCreated` arriving later is voided at once. The runbook "Stuck checkout saga" shows how to
   find such trips.
-- **Capture has no failure event.** A capture Payments never answers leaves the trip `Capturing`.
+- **A capture Payments never answers** (it answers a refusal with `PaymentOperationRefused`, but a lost message is lost) leaves the trip `Capturing`.
+- **A refused refund is not retried.** The item says `Refused` and the money is owed; there is no automatic second attempt.
 - **Dead lettered compensations have no replay tool yet** (`docs/messaging.md`). The resend after 30 seconds covers a
   lost message, not a poisoned one.
 - **A stay's start is the check-in instant read as UTC**, and its first night the average night (above).

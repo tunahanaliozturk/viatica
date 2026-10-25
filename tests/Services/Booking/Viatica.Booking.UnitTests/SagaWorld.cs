@@ -25,7 +25,7 @@ internal enum Fate
     VoidWindowClosed,
 }
 
-internal sealed record WorldScript(IReadOnlyList<(ItemKind Kind, Fate Fate)> Items, bool DeclinePayment)
+internal sealed record WorldScript(IReadOnlyList<(ItemKind Kind, Fate Fate)> Items, bool DeclinePayment, bool RefuseCapture = false)
 {
     public static WorldScript Of(bool declinePayment, params (ItemKind, Fate)[] items) => new(items, declinePayment);
 }
@@ -46,6 +46,7 @@ internal sealed class SagaWorld
     private readonly Dictionary<Guid, (Guid OrderId, string State, decimal Total)> orders = [];
     private readonly List<Action<SagaWorld>> lateWork = [];
     private readonly bool declinePayment;
+    private readonly bool refuseCapture;
 
     // One FIFO queue per owner, like one partition per topic: an owner's answers arrive in the order it gave them.
     private readonly Dictionary<string, List<Message>> queues = new()
@@ -60,6 +61,7 @@ internal sealed class SagaWorld
     {
         Random = new Random(seed);
         declinePayment = script.DeclinePayment;
+        refuseCapture = script.RefuseCapture;
         Now = Start;
         Trip = Trip.Create(Guid.CreateVersion7(), Guid.CreateVersion7(), null, Now);
         Trip.TakeDirectives();
@@ -381,6 +383,10 @@ internal sealed class SagaWorld
                     "payments",
                     t => PaymentState == "declined" ? t.OnPaymentDeclined(paymentId, Now) : t.OnPaymentAuthorized(paymentId, Now));
                 break;
+            case CapturePayment c when refuseCapture && PaymentState is "authorised":
+                // Payments will not capture it (a money rule, or the provider) and says so.
+                Enqueue("payments", t => t.OnPaymentOperationRefused(c.PaymentId, PaymentOperationKind.Capture, c.PaymentId, Now));
+                break;
             case CapturePayment c when PaymentState is "authorised" or "captured":
                 PaymentState = "captured";
                 Enqueue("payments", t => t.OnPaymentCaptured(c.PaymentId, Now));
@@ -388,6 +394,10 @@ internal sealed class SagaWorld
             case VoidPayment v when PaymentState is "authorised" or "voided":
                 PaymentState = "voided";
                 Enqueue("payments", t => t.OnPaymentVoided(v.PaymentId, Now));
+                break;
+            case VoidPayment v:
+                // A void for a payment that was declined or never made: refused, which is an answer.
+                Enqueue("payments", t => t.OnPaymentOperationRefused(v.PaymentId, PaymentOperationKind.Void, v.PaymentId, Now));
                 break;
             case RefundPayment r when PaymentState == "captured":
                 Enqueue("payments", t => t.OnPaymentRefunded(r.PaymentId, r.RefundId, Now));

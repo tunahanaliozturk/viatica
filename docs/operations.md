@@ -196,8 +196,8 @@ from booking.trip_items where trip_id = '<trip id>' order by added_at;
 - `Committing`, an item `awaiting = Commit` for minutes: Stays or Cars has not answered the commit. Its own sweeper
   decides: if the hold expired you will see `StayHoldExpired` or `CarHoldExpired` and the trip unwinds; if the
   owner is down, bring it back and the commit lands.
-- `Capturing` for minutes: Payments has not answered. The contracts have no capture failure event, so a capture that
-  failed for good leaves the trip here. Look in Payments for the operation (`payment_id` on the trip) and its outcome;
+- `Capturing` for minutes: Payments has not answered. A refused capture comes back as `PaymentOperationRefused` and
+  unwinds the trip, so a trip waiting here has lost a message. Look in Payments for the operation (`payment_id` on the trip) and its outcome;
   if it was captured, replay `PaymentCaptured` to `payments.v1` (the inbox makes a replay of something applied a
   no-op); if it cannot be, the tickets and rooms are real and the decision is a person's.
 - `Failed` but an owner still shows a live hold, order or authorisation (a reconciliation failure): the trip is

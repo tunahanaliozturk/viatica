@@ -74,8 +74,11 @@ only race them.
 - A flight whose order is not known yet cannot be voided by id, because Flights decides the order id. An unwinding trip
   waits for that answer (or for `FlightOrderRejected`) and voids a `FlightOrderCreated` that arrives late. If the airline
   never answers, the trip stays `Unwinding`; the runbook "Stuck checkout saga" says how to see and settle it.
-- Capture has no failure event in the contracts, so a capture Payments never answers leaves the trip `Capturing`. The
-  deadline does not apply there on purpose: the tickets are issued and the rooms are sold.
+- A capture Payments refuses (`PaymentOperationRefused`) unwinds the trip like a lost commit: the tickets are voided,
+  the committed stays and cars cancelled, the authorisation voided, and the trip fails as `PaymentDeclined`
+  (`FailureTests.A_capture_that_payments_refuses_gives_everything_back_and_the_trip_fails_instead_of_waiting_for_ever`).
+  A capture nobody answers leaves the trip `Capturing`; the deadline does not apply there on purpose, because the
+  tickets are issued and the rooms are sold.
 - The property that the saga ends legally is checked as a property, not by examples:
   `RandomRunTests` plays 20,000 runs in each of two delivery modes (each owner's answers in order, and any order) over
   owner models that decline, refuse, answer twice and answer late, and asks the owners' books at the end whether

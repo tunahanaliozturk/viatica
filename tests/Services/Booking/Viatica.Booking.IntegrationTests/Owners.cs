@@ -97,6 +97,7 @@ internal sealed class Owners : IAsyncDisposable
     private readonly Dictionary<Guid, IReadOnlyList<PassengerDetails>> passengers = [];
     private readonly Dictionary<Guid, string> paymentTokens = [];
     private readonly HashSet<Guid> declinedTrips = [];
+    private readonly HashSet<Guid> capturelessTrips = [];
 
     private Owners(IHost host, IConsumer<string, byte[]> consumer, FakeTimeProvider clock, byte[] passengerKey)
     {
@@ -183,6 +184,15 @@ internal sealed class Owners : IAsyncDisposable
         lock (gate)
         {
             declinedTrips.Add(tripId);
+        }
+    }
+
+    /// <summary>Payments will not capture this trip's payment and says so.</summary>
+    public void RefuseCapture(Guid tripId)
+    {
+        lock (gate)
+        {
+            capturelessTrips.Add(tripId);
         }
     }
 
@@ -812,6 +822,18 @@ internal sealed class Owners : IAsyncDisposable
 
     private async Task CaptureAsync(PaymentCaptureRequested request)
     {
+        bool refuse;
+        lock (gate)
+        {
+            refuse = capturelessTrips.Contains(request.TripId);
+        }
+
+        if (refuse)
+        {
+            await SendAsync(new PaymentOperationRefused(request.PaymentId, request.TripId, PaymentOperation.Capture, request.PaymentId, "ExceedsAuthorization"));
+            return;
+        }
+
         bool done;
         lock (gate)
         {
@@ -842,10 +864,9 @@ internal sealed class Owners : IAsyncDisposable
             }
         }
 
-        if (done)
-        {
-            await SendAsync(new PaymentVoided(request.PaymentId, request.TripId));
-        }
+        await SendAsync(done
+            ? new PaymentVoided(request.PaymentId, request.TripId)
+            : new PaymentOperationRefused(request.PaymentId, request.TripId, PaymentOperation.Void, request.PaymentId, "NotAuthorized"));
     }
 
     private async Task RefundAsync(PaymentRefundRequested request)

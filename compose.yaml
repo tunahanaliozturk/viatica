@@ -67,6 +67,7 @@ x-booking-environment: &booking-environment
   Viatica__Pii__StorageKey: dmlhdGljYS1kZXYtYm9va2luZy1zdG9yYWdlLWtleSE=
   Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
   Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+  Viatica__Auth__AllowInsecureMetadata: "true"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
 
 services:

@@ -73,6 +73,8 @@ All notable changes to this project are documented here. The format follows
   Flights, kept sealed only while the saga runs and never logged.
 - `booking` and `booking-migrate` in `compose.yaml`, a Booking probe in `deploy/check-stack.sh`, and one
   `x-passenger-key` anchor that Booking and Flights both read.
+- `PaymentOperationRefused` (with Payments) is consumed: a refused capture unwinds the trip, a refused void settles the
+  wait, a refused refund is recorded on the item.
 - `HoldTerms` (partner, start, cancellation policy) on `StayHoldPlaced` and `CarHoldPlaced`, filled by Stays and Cars,
   and `TripStateChanged`, `TripItemStateChanged` and `TripClaimed` on `booking.v1`.
 - Search service (`src/Services/Search`, port 8104): stays search by destination text or map box, with availability

@@ -115,6 +115,23 @@ public sealed class FailureTests(WorldFixture fixture) : IClassFixture<WorldFixt
     }
 
     [Fact]
+    public async Task A_capture_that_payments_refuses_gives_everything_back_and_the_trip_fails_instead_of_waiting_for_ever()
+    {
+        (Guid trip, Guid stay, Guid car, Guid flight) = await world.BasketAsync();
+        world.Owners.RefuseCapture(trip);
+
+        await world.CheckoutAsync(trip);
+        await world.WaitForTripAsync(trip, "Failed");
+
+        (await world.NextAsync(nameof(TripFailed), trip)).DataString("reason").ShouldBe("PaymentDeclined");
+        world.Owners.HoldOfItem(stay)!.State.ShouldBe("cancelled");
+        world.Owners.HoldOfItem(car)!.State.ShouldBe("cancelled");
+        world.Owners.OrderOfItem(flight)!.State.ShouldBe("voided");
+        world.Owners.PaymentOfTrip(trip)!.State.ShouldBe("voided");
+        world.Owners.ReceivedFor(trip).OfType<PaymentCaptureRequested>().Count().ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_hold_that_arrives_after_the_trip_gave_up_on_the_item_is_released_exactly_once()
     {
         (Guid trip, Guid stay, Guid car, _) = await world.BasketAsync(

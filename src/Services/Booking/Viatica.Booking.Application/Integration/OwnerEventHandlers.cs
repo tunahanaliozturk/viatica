@@ -242,6 +242,26 @@ public sealed class PaymentRefundedHandler(TripRunner runner) : IIntegrationEven
     }
 }
 
+public sealed class PaymentOperationRefusedHandler(TripRunner runner) : IIntegrationEventHandler<PaymentOperationRefused>
+{
+    public Task HandleAsync(PaymentOperationRefused message, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        PaymentOperationKind operation = message.Operation switch
+        {
+            PaymentOperation.Capture => PaymentOperationKind.Capture,
+            PaymentOperation.Void => PaymentOperationKind.Void,
+            _ => PaymentOperationKind.Refund,
+        };
+
+        return runner.ApplyAsync(
+            message.TripId,
+            nameof(PaymentOperationRefused),
+            (trip, now) => trip.OnPaymentOperationRefused(message.PaymentId, operation, message.OperationId, now),
+            cancellationToken);
+    }
+}
+
 /// <summary>Reads the terms an owner attached to a hold. Without them (an older owner) the item is kept but cannot refund or be listed.</summary>
 internal static class Terms
 {

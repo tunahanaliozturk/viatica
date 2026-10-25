@@ -313,6 +313,52 @@ public sealed class SagaBranchTests
     }
 
     [Fact]
+    public void A_refused_capture_gives_back_the_tickets_and_the_rooms_and_voids_the_authorisation()
+    {
+        var t = new TripScenario();
+        t.Through(TripStatus.Capturing);
+
+        IReadOnlyList<SagaDirective> refused = t.Track(t.Trip.OnPaymentOperationRefused(t.Trip.PaymentId, PaymentOperationKind.Capture, t.Trip.PaymentId, t.Now));
+
+        t.Trip.Status.ShouldBe(TripStatus.Unwinding);
+        t.Trip.Failure.ShouldBe(FailureReason.PaymentDeclined);
+        refused.OfType<CancelBooking>().Select(static c => c.ItemId).ShouldBe([t.Stay, t.Car], ignoreOrder: true);
+        refused.OfType<VoidFlightOrder>().Single().OrderId.ShouldBe(t.FlightOrder);
+        refused.OfType<VoidPayment>().ShouldHaveSingleItem();
+
+        t.Trip.OnBookingCancelled(t.Stay, t.HoldOf(t.Stay), t.Now);
+        t.Trip.OnBookingCancelled(t.Car, t.HoldOf(t.Car), t.Now);
+        t.Trip.OnFlightOrderVoided(t.Flight, t.FlightOrder, t.Now);
+        t.Trip.OnPaymentVoided(t.Trip.PaymentId, t.Now).OfType<TripFailedAnnouncement>().Single().Reason.ShouldBe(FailureReason.PaymentDeclined);
+        t.Trip.Status.ShouldBe(TripStatus.Failed);
+        t.Sent.OfType<CapturePayment>().Count().ShouldBe(1, "the capture is not asked for again");
+    }
+
+    [Fact]
+    public void A_refused_void_means_there_is_nothing_left_to_void_and_a_refused_refund_leaves_the_item_cancelled()
+    {
+        var failing = new TripScenario(stay: false, car: false);
+        failing.CheckOut();
+        failing.Trip.OnFlightOrderRejected(failing.Flight, "SoldOut", failing.Now);
+        failing.Trip.OnPaymentAuthorized(failing.Trip.PaymentId, failing.Now).OfType<VoidPayment>().ShouldHaveSingleItem();
+
+        failing.Trip.OnPaymentOperationRefused(failing.Trip.PaymentId, PaymentOperationKind.Void, failing.Trip.PaymentId, failing.Now);
+        failing.Trip.Payment.ShouldBe(PaymentStatus.Voided);
+        failing.Trip.Status.ShouldBe(TripStatus.Failed);
+        failing.Trip.OnPaymentOperationRefused(failing.Trip.PaymentId, PaymentOperationKind.Void, failing.Trip.PaymentId, failing.Now).ShouldBeEmpty();
+
+        TripScenario t = new TripScenario().Through(TripStatus.Confirmed);
+        t.Trip.RequestCancellation(t.Stay, t.Now, TimeSpan.FromMinutes(2));
+        Guid refund = t.Trip.OnBookingCancelled(t.Stay, t.HoldOf(t.Stay), t.Now).OfType<RefundPayment>().Single().RefundId;
+
+        t.Trip.OnPaymentOperationRefused(t.Trip.PaymentId, PaymentOperationKind.Refund, Guid.NewGuid(), t.Now).ShouldBeEmpty("another refund, another refusal");
+        t.Trip.OnPaymentOperationRefused(t.Trip.PaymentId, PaymentOperationKind.Refund, refund, t.Now);
+        t.Trip.Items.Single(i => i.Id == t.Stay).Refund.ShouldBe(RefundStatus.Refused);
+        t.Trip.Items.Single(i => i.Id == t.Stay).Status.ShouldBe(ItemStatus.Cancelled);
+        t.Trip.Status.ShouldBe(TripStatus.Confirmed);
+    }
+
+    [Fact]
     public void A_capture_answered_long_after_the_deadline_still_confirms_the_trip()
     {
         var t = new TripScenario();

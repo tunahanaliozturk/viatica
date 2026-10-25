@@ -331,6 +331,43 @@ public sealed partial class Trip
         return Complete(now);
     }
 
+    /// <summary>
+    /// Payments will not carry out a capture, void or refund and says so, so the trip is never left waiting for it.
+    /// A refused capture means the trip cannot be paid for: the tickets and rooms are given back and the authorisation
+    /// voided. A refused void means there is nothing left to void: the authorisation is gone or was never granted. A
+    /// refused refund leaves the item cancelled and the money owed, which a person settles.
+    /// </summary>
+    public IReadOnlyList<SagaDirective> OnPaymentOperationRefused(
+        Guid paymentId, PaymentOperationKind operation, Guid operationId, DateTimeOffset now)
+    {
+        if (paymentId != PaymentId)
+        {
+            return Complete(now);
+        }
+
+        switch (operation)
+        {
+            case PaymentOperationKind.Capture when Payment == PaymentStatus.CaptureRequested && Status == TripStatus.Capturing:
+                // Nothing was taken. Whatever the card has is still only an authorisation, and it is voided with the rest.
+                Payment = PaymentStatus.Authorized;
+                BeginUnwinding(FailureReason.PaymentDeclined, now);
+                break;
+
+            case PaymentOperationKind.Void when Payment == PaymentStatus.VoidRequested:
+                Payment = PaymentStatus.Voided;
+                changed = true;
+                Advance(now);
+                break;
+
+            case PaymentOperationKind.Refund when items.Find(i => i.RefundId == operationId && i.Refund == RefundStatus.Requested) is { } item:
+                item.Refund = RefundStatus.Refused;
+                changed = true;
+                break;
+        }
+
+        return Complete(now);
+    }
+
     public IReadOnlyList<SagaDirective> OnPaymentRefunded(Guid paymentId, Guid refundId, DateTimeOffset now)
     {
         if (paymentId == PaymentId && items.Find(i => i.RefundId == refundId && i.Refund == RefundStatus.Requested) is { } item)

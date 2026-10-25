@@ -94,6 +94,17 @@ public enum RefundStatus
     None,
     Requested,
     Refunded,
+
+    /// <summary>Payments refused the refund. The item stays cancelled and the money is owed: a person settles it.</summary>
+    Refused,
+}
+
+/// <summary>The payment operations Payments can refuse after the payment exists. An authorisation is declined instead.</summary>
+public enum PaymentOperationKind
+{
+    Capture,
+    Void,
+    Refund,
 }
 
 public enum Penalty

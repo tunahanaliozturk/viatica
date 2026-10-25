@@ -89,7 +89,8 @@ public static class BookingInfrastructure
             .Handle<PaymentDeclined, PaymentDeclinedHandler>()
             .Handle<PaymentCaptured, PaymentCapturedHandler>()
             .Handle<PaymentVoided, PaymentVoidedHandler>()
-            .Handle<PaymentRefunded, PaymentRefundedHandler>();
+            .Handle<PaymentRefunded, PaymentRefundedHandler>()
+            .Handle<PaymentOperationRefused, PaymentOperationRefusedHandler>();
 
         return services;
     }

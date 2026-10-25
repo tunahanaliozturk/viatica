@@ -88,7 +88,7 @@ public sealed class RandomRunTests
             items.Add((kind, fate));
         }
 
-        (SagaWorld world, _) = SagaWorld.CheckedOut(new WorldScript(items, DeclinePayment: random.Next(100) < 12), seed);
+        (SagaWorld world, _) = SagaWorld.CheckedOut(new WorldScript(items, DeclinePayment: random.Next(100) < 12, RefuseCapture: random.Next(100) < 8), seed);
         int biggestJump = random.Next(5, 900);
 
         for (int step = 0; step < 90; step++)
