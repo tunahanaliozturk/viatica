@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Use cases, the port to the payment provider and the event handlers. EF Core is allowed here, the provider is not;
+    no ASP.NET Core, Kafka or HTTP client (tests/Viatica.ArchitectureTests).
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Relevox.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Payments.Domain\Viatica.Payments.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\Viatica.Contracts\Viatica.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Viatica.Payments.UnitTests" />
+  </ItemGroup>
+
+</Project>

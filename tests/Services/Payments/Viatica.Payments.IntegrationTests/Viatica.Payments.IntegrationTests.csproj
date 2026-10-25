@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    The real Payments host on Testcontainers Postgres and Kafka, talking over HTTP to the real payment provider simulator
+    hosted in process, with a Booking stand-in that writes its requests to booking.v1 through an outbox. The simulator is
+    aliased: it has a top-level Program of its own, and so does the Payments host.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Services\Payments\Viatica.Payments.Api\Viatica.Payments.Api.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Simulators\Viatica.PspSim\Viatica.PspSim.csproj" Aliases="sim" />
+    <ProjectReference Include="..\..\..\Viatica.Testing\Viatica.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

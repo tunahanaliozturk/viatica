@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- EF Core on Postgres, the payment provider's HTTP adapter and the Kafka wiring. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Viatica.Payments.Application\Viatica.Payments.Application.csproj" />
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel.Messaging\Viatica.Kernel.Messaging.csproj" />
+  </ItemGroup>
+
+</Project>

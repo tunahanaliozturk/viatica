@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The payment, its money rules, and the card value objects. Kernel and OrionGuard only; see tests/Viatica.ArchitectureTests. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Kernel\Viatica.Kernel\Viatica.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>
