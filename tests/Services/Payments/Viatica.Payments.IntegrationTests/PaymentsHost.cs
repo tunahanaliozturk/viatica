@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Viatica.Kernel;
 using Viatica.Payments.Application.Provider;
 using Viatica.Payments.Domain.Cards;
@@ -110,6 +111,16 @@ internal sealed class PaymentsHost : WebApplicationFactory<Program>
     {
         await using AsyncServiceScope scope = Services.CreateAsyncScope();
         return await work(scope.ServiceProvider.GetRequiredService<PaymentsDbContext>());
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        // Each host has a database of its own, and so a pool of its own that nothing would otherwise close. Left open they
+        // add up past the server's 100 connections over a run (the same as StaysHost).
+        using var connection = new NpgsqlConnection(PostgresConnection);
+        NpgsqlConnection.ClearPool(connection);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

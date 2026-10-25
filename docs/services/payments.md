@@ -127,7 +127,7 @@ captured, and a voided payment has had nothing taken.
 
 ## Unknown outcomes
 
-This is the part worth arguing with, and ADR 0006 records the alternatives. A provider that times out may have done the work. The rule is PAY-3: ask what
+This is the part worth arguing with, and ADR 0008 records the alternatives. A provider that times out may have done the work. The rule is PAY-3: ask what
 it recorded under the key, never retry blindly, and if that cannot be answered, decide nothing and try again later.
 
 | Situation | What Payments does | Why |

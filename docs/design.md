@@ -136,7 +136,7 @@ One payment per trip: authorise the sum of the authoritative item totals from th
 the same amount on confirmation, refunds per cancellation. Payments answers every request with exactly one outcome
 event per operation id, even when the provider timed out (it asks the provider for the outcome first).
 A capture, void or refund that a money rule or the provider refuses is answered with `PaymentOperationRefused`, so Booking
-is never left waiting. The details are in `docs/services/payments.md` and ADR 0006.
+is never left waiting. The details are in `docs/services/payments.md` and ADR 0008.
 
 ## Invariants the system tests reconcile
 

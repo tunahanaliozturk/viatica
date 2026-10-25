@@ -1,4 +1,4 @@
-# 0006: Settle a provider timeout by lookup, and resend only under the same key
+# 0008: Settle a provider timeout by lookup, and resend only under the same key
 
 Status: accepted, 2026-10-25
 

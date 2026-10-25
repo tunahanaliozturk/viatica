@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Viatica.Contracts;
 using Viatica.Kernel.Messaging;
 using Viatica.Testing;
@@ -18,8 +19,13 @@ namespace Viatica.Payments.IntegrationTests;
 internal sealed class BookingStub : IAsyncDisposable
 {
     private readonly IHost host;
+    private readonly string connection;
 
-    private BookingStub(IHost host) => this.host = host;
+    private BookingStub(IHost host, string connection)
+    {
+        this.host = host;
+        this.connection = connection;
+    }
 
     public static async Task<BookingStub> StartAsync(PostgresFixture postgres, KafkaFixture kafka, string bookingTopic)
     {
@@ -40,7 +46,7 @@ internal sealed class BookingStub : IAsyncDisposable
         }
 
         await stub.StartAsync();
-        return new BookingStub(stub);
+        return new BookingStub(stub, connection);
     }
 
     /// <summary>
@@ -63,6 +69,8 @@ internal sealed class BookingStub : IAsyncDisposable
     {
         await host.StopAsync();
         host.Dispose();
+        using var pooled = new NpgsqlConnection(connection);
+        NpgsqlConnection.ClearPool(pooled);
     }
 }
 
