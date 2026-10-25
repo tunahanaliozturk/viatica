@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moongazing.OrionGuard.DependencyInjection;
 using Relevox;
+using Viatica.Kernel;
 using Viatica.Payments.Application.Provider;
 using Viatica.Payments.Domain;
 using Viatica.Payments.Domain.Cards;
@@ -75,9 +77,7 @@ public sealed class TokeniseCardHandler(
 
         // The validator ran first; a caller that skipped it is told its card is wrong, not why in detail.
         CardDetails card = CardDetails.TryCreate(request.Number, request.ExpMonth, request.ExpYear, request.Cvc, DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime))
-            ?? throw new Viatica.Kernel.ApiErrorException(
-                Viatica.Kernel.ErrorCategory.InvalidRequest,
-                new Viatica.Kernel.ApiError(PaymentErrorCodes.PaymentMethodInvalid, "The card is not valid."));
+            ?? throw ApiErrorException.Invalid(PaymentErrorCodes.PaymentMethodInvalid, "The card is not valid.");
 
         // A new key per request: a tokenisation has no id of the client's to be idempotent on, and a token made twice
         // for one card costs nothing.
@@ -103,7 +103,7 @@ public sealed class TokeniseCardHandler(
                 return new TokenisationUnavailable();
 
             default:
-                throw new System.Diagnostics.UnreachableException("A tokenise outcome was never set.");
+                throw new UnreachableException("A tokenise outcome was never set.");
         }
     }
 
