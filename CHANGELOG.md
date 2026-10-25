@@ -28,6 +28,9 @@ All notable changes to this project are documented here. The format follows
 - Airline simulator: an offer id with a null leg, a timestamp outside `DateTimeOffset`, impossible passenger counts or
   negative or oversized amounts is answered `OFFER_NOT_FOUND` by re-price and order creation instead of a 500 or, for
   counts and amounts, accepted (#48).
+- Airline simulator: order creation retries a booking reference that is already in use (up to five draws, through an
+  injectable `IBookingReferences`) instead of failing with a 500; an idempotency key replay still returns the first
+  order (#49).
 
 ### Added
 

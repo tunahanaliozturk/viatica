@@ -13,12 +13,16 @@ internal static class Ordering
     private const int MaxIdempotencyKeyLength = 100;
     private const int MaxNameLength = 60;
 
+    // A clash is a one in a billion event, so a second one in a row means the generator is broken, not unlucky.
+    private const int MaxReferenceAttempts = 5;
+
     public static async Task<IResult> CreateAsync(
         string airline,
         OrderCreateRequest request,
         RouteNetwork network,
         Behaviours behaviours,
         AirlineSimDb db,
+        IBookingReferences references,
         TimeProvider clock,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -65,21 +69,32 @@ internal static class Ordering
             return await TimeOutAsync(airline, knobs, createdAnyway: false, logger, cancellationToken);
         }
 
-        Order order = Order.Book(airline, request.IdempotencyKey, request.OfferId, fareClass.Code, legs, token.Mix, token.Price, now);
-        try
+        Order order;
+        for (int attempt = 1; ; attempt++)
         {
-            if (!await TryBookAsync(db, order, legs, cancellationToken))
+            order = Order.Book(airline, references.Next(), request.IdempotencyKey, request.OfferId, fareClass.Code, legs, token.Mix, token.Price, now);
+            try
             {
-                return timeout
-                    ? await TimeOutAsync(airline, knobs, createdAnyway: false, logger, cancellationToken)
-                    : SupplierError.NoAvailability.ToResult();
+                if (!await TryBookAsync(db, order, legs, cancellationToken))
+                {
+                    return timeout
+                        ? await TimeOutAsync(airline, knobs, createdAnyway: false, logger, cancellationToken)
+                        : SupplierError.NoAvailability.ToResult();
+                }
+
+                break;
             }
-        }
-        catch (DbUpdateException exception) when (AirlineSimDb.IsIdempotencyKeyClash(exception))
-        {
-            // Two creations with one key raced and the other committed first. Answer with its order.
-            db.ChangeTracker.Clear();
-            return Replay((await FindAsync(db, airline, request.IdempotencyKey, cancellationToken))!, request, network, logger);
+            catch (DbUpdateException exception) when (AirlineSimDb.IsIdempotencyKeyClash(exception))
+            {
+                // Two creations with one key raced and the other committed first. Answer with its order.
+                db.ChangeTracker.Clear();
+                return Replay((await FindAsync(db, airline, request.IdempotencyKey, cancellationToken))!, request, network, logger);
+            }
+            catch (DbUpdateException exception) when (AirlineSimDb.IsBookingReferenceClash(exception) && attempt < MaxReferenceAttempts)
+            {
+                // The reference is already another order's. The transaction rolled back with its seats; draw again.
+                db.ChangeTracker.Clear();
+            }
         }
 
         Log.OrderBooked(logger, airline, order.BookingReference, order.FareClass, order.Seats);

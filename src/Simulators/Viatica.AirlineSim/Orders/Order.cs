@@ -26,8 +26,6 @@ internal sealed class Order
     /// <summary>How long a booked order may wait for ticketing, unless departure comes first.</summary>
     public static readonly TimeSpan TicketingWindow = TimeSpan.FromHours(24);
 
-    private const string ReferenceAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
     public Guid Id { get; init; }
 
     public required string Airline { get; init; }
@@ -79,7 +77,7 @@ internal sealed class Order
     public int Seats => Adults + Children;
 
     public static Order Book(
-        string airline, string idempotencyKey, string offerId, char fareClass, Leg[] legs, PassengerMix mix, Price price, DateTimeOffset now)
+        string airline, string bookingReference, string idempotencyKey, string offerId, char fareClass, Leg[] legs, PassengerMix mix, Price price, DateTimeOffset now)
     {
         DateTimeOffset firstDeparture = legs.Min(static leg => leg.Flight.DepartureUtc(leg.Date));
         DateTimeOffset limit = now + TicketingWindow;
@@ -88,7 +86,7 @@ internal sealed class Order
         {
             Id = Guid.CreateVersion7(now),
             Airline = airline,
-            BookingReference = RandomNumberGenerator.GetString(ReferenceAlphabet, 6),
+            BookingReference = bookingReference,
             IdempotencyKey = idempotencyKey,
             OfferId = offerId,
             FareClass = fareClass,

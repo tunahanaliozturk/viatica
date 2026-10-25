@@ -19,6 +19,7 @@ const int DefaultSeed = 20261024;
 builder.Services.AddSingleton(static services => new RouteNetwork(Seed(services)));
 builder.Services.AddSingleton(static services => new Behaviours(Seed(services)));
 builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.TryAddSingleton<IBookingReferences, RandomBookingReferences>();
 
 builder.Services.AddDbContextPool<AirlineSimDb>(static (services, options) =>
     options

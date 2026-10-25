@@ -122,9 +122,9 @@ public sealed class OrderTests
             .Select(flight => new Leg(flight, today))
             .First(leg => leg.Flight.DepartureUtc(today) > Now.AddHours(3) && leg.Flight.DepartureUtc(today) < Now.AddHours(12));
 
-        Order.Book("ZC", "k1", "o", 'K', [farAway], new PassengerMix(1, 0, 0), new Price(100, 20), Now)
+        Order.Book("ZC", "ABC234", "k1", "o", 'K', [farAway], new PassengerMix(1, 0, 0), new Price(100, 20), Now)
             .TicketingTimeLimit.ShouldBe(Now + Order.TicketingWindow);
-        Order.Book("ZC", "k2", "o", 'K', [laterToday], new PassengerMix(1, 0, 0), new Price(100, 20), Now)
+        Order.Book("ZC", "DEF567", "k2", "o", 'K', [laterToday], new PassengerMix(1, 0, 0), new Price(100, 20), Now)
             .TicketingTimeLimit.ShouldBe(laterToday.Flight.DepartureUtc(today).AddHours(-1));
     }
 
@@ -133,7 +133,7 @@ public sealed class OrderTests
         mix ??= new PassengerMix(1, 0, 0);
         Leg[] legs = [new Leg(Network.Between("ZC", "IST", "LHR")[0], new DateOnly(2026, 12, 15))];
         Price price = RouteNetwork.PriceOf(legs, FareClass.Find(fareClass)!, mix);
-        return Order.Book("ZC", Guid.NewGuid().ToString(), "offer", fareClass, legs, mix, price, Now);
+        return Order.Book("ZC", "ABC234", Guid.NewGuid().ToString(), "offer", fareClass, legs, mix, price, Now);
     }
 
     private static Order Ticketed(char fareClass, PassengerMix? mix = null)
