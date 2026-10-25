@@ -32,8 +32,6 @@ public sealed class PaymentAuthorizationRequestedHandler(
     TimeProvider time,
     ILogger<PaymentAuthorizationRequestedHandler> logger) : IIntegrationEventHandler<PaymentAuthorizationRequested>
 {
-    public const string ProviderUnavailable = nameof(ProviderUnavailable);
-
     public async Task HandleAsync(PaymentAuthorizationRequested message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -103,7 +101,7 @@ public sealed class PaymentAuthorizationRequestedHandler(
                 break;
 
             case NothingSent:
-                Decline(message, amount, ProviderUnavailable, storePayment: true);
+                Decline(message, amount, PaymentErrorCodes.ProviderUnavailable, storePayment: true);
                 break;
 
             default:

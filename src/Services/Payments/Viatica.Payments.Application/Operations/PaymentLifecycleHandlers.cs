@@ -13,7 +13,7 @@ namespace Viatica.Payments.Application.Operations;
 // from a redelivery or a Booking that asked twice, by doing nothing. Every money rule is asked of the Payment before the
 // provider hears about the request, so a request a rule refuses never costs a provider call.
 //
-// A request the provider cannot settle throws (see OperationDesk) instead of failing fast. Unlike an authorisation,
+// A request the provider cannot settle throws (see ProviderSettlement) instead of failing fast. Unlike an authorisation,
 // these cannot be declined: Booking has already ticketed, committed or cancelled something on the strength of the
 // money, and "not captured" would be a statement about the provider that nobody checked. They are tried again.
 

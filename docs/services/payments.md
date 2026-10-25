@@ -127,7 +127,7 @@ captured, and a voided payment has had nothing taken.
 
 ## Unknown outcomes
 
-This is the part worth arguing with. A provider that times out may have done the work. The rule is PAY-3: ask what
+This is the part worth arguing with, and ADR 0006 records the alternatives. A provider that times out may have done the work. The rule is PAY-3: ask what
 it recorded under the key, never retry blindly, and if that cannot be answered, decide nothing and try again later.
 
 | Situation | What Payments does | Why |
@@ -268,5 +268,7 @@ the pull request that added them.
   does not send yet.
 - The lookup endpoint is the simulator's. A real provider has some equivalent (a list filtered by your own
   reference); the adapter is the only place that changes.
+- Tokenising is a way to test whether a card number is good, and Payments does not limit how often one may ask.
+  Rate limits on checkout belong to the gateway (`docs/requirements.md`, section 12), which is not built yet.
 - A refund whose id repeats with a different amount is treated as the same operation: the first request wins and the
   second is ignored.
