@@ -85,6 +85,12 @@ public sealed class MoneyTests
     [InlineData("eur")]
     [InlineData("EU")]
     [InlineData("")]
+    [InlineData("EUR\n")]      // $ in a .NET regex also matches before a final newline
+    [InlineData("EUR\r\n")]
+    [InlineData("\nEUR")]
+    [InlineData("E\nR")]
+    [InlineData("EUR ")]
+    [InlineData("ÉUR")]
     public void Needs_an_upper_case_three_letter_code(string currency) =>
         Should.Throw<Exception>(() => new Money(1m, currency));
 
