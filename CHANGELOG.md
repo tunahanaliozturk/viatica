@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format follows
   the authority's scheme (#46).
 - `SkipTokenCodec.Encode` refuses a position that would make a token longer than the 2,048 characters `TryDecode`
   accepts, instead of emitting a `nextLink` that always answers `InvalidSkipToken` (#47).
+- `Money` rejects a currency code with a trailing newline, which the `^[A-Z]{3}$` check let through; the check is now
+  a length and ASCII upper case test, as in the JSON converter (#52).
 
 ### Added
 

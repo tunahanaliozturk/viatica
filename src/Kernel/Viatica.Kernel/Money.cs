@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
-using Moongazing.OrionGuard.Core;
 
 namespace Viatica.Kernel;
 
@@ -20,7 +19,13 @@ public sealed record Money : IComparable<Money>
 
     public Money(decimal amount, string currency)
     {
-        Ensure.That(currency, nameof(currency)).NotNull().Matches("^[A-Z]{3}$");
+        ArgumentNullException.ThrowIfNull(currency);
+
+        // Not a regex: in .NET "$" also matches before a final newline, so "^[A-Z]{3}$" lets a code with a trailing newline through.
+        if (currency.Length != 3 || !currency.All(char.IsAsciiLetterUpper))
+        {
+            throw new ArgumentException($"'{currency}' is not an upper case three letter ISO 4217 code.", nameof(currency));
+        }
 
         int minorUnits = MinorUnitsOf(currency);
         if (decimal.Round(amount, minorUnits) != amount)
