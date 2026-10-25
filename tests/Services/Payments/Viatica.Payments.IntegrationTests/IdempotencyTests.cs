@@ -34,6 +34,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
         await payments.RawBooking.SendAsync(capture, eventId);
         await payments.RawBooking.SendAsync(capture, eventId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         Scenario.OfType(events, nameof(PaymentCaptured)).Count.ShouldBe(1);
         payments.Host.Wire.Posts("/capture").Count(e => e.IdempotencyKey == Scenario.KeyOf(payment.TripId, OperationKind.Capture, payment.PaymentId)).ShouldBe(1);
@@ -49,6 +50,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
         await scenario.SendAsync(capture, capture, capture);
         await scenario.SendAsync(capture);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         Scenario.OfType(events, nameof(PaymentCaptured)).Count.ShouldBe(1, "one outcome per operation id");
         events.Count(static m => m.Type != nameof(PaymentAuthorized)).ShouldBe(1, "and nothing else");
@@ -68,6 +70,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
         await scenario.SendAsync(request, request);
         await scenario.SendAsync(request);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(request.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         Scenario.OfType(events, nameof(PaymentAuthorized)).Count.ShouldBe(1);
         events.Count(static m => m.Type is nameof(PaymentDeclined)).ShouldBe(0);
@@ -82,6 +85,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
 
         await scenario.SendAsync(@void, @void, @void);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         Scenario.OfType(events, nameof(PaymentVoided)).Count.ShouldBe(1);
         events.Count(static m => m.Type == nameof(PaymentOperationRefused)).ShouldBe(0, "a repeat is not a refusal either");
@@ -100,6 +104,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
         await scenario.SendAsync(request, request);
         await scenario.SendAsync(new PaymentRefundRequested(payment.TripId, payment.PaymentId, other, Scenario.Eur(60m)), request);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         IReadOnlyList<ProbedMessage> refunded = Scenario.OfType(events, nameof(PaymentRefunded));
         refunded.Select(static m => m.DataString("refundId")).Order().ShouldBe([refund.ToString(), other.ToString()], ignoreOrder: true);
@@ -118,6 +123,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
 
         await scenario.SendAsync(tooMuch, tooMuch, tooMuch);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a repeat is a no-op, not an error to retry");
 
         Scenario.OfType(events, nameof(PaymentOperationRefused)).Count.ShouldBe(1);
     }
@@ -132,6 +138,7 @@ public sealed class IdempotencyTests(DefaultPayments payments) : IClassFixture<D
         await scenario.SendAsync(new PaymentCaptureRequested(payment.TripId, payment.PaymentId, Scenario.Eur(100m)));
         await scenario.NextAsync(nameof(PaymentCaptured), payment.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(1, "the simulated crash, and nothing else");
 
         Scenario.OfType(events, nameof(PaymentCaptured)).Count.ShouldBe(1);
         // The first attempt reached the provider and was lost with the crash; the redelivery sent the same key again

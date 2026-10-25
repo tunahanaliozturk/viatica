@@ -174,4 +174,25 @@ airports=$(curl -fsS "http://localhost:8104/autocomplete?q=lis&types=airport&api
 grep -q '"code":"LIS"' <<< "$airports" || fail "search: autocomplete did not find the Lisbon airport"
 ok "search: ready, aliases in place, anonymous autocomplete answers"
 
+# Payment provider simulator and Payments --------------------------------------------------------------------------
+
+curl -fsS http://localhost:8202/health/ready > /dev/null || fail "psp-sim: /health/ready did not answer 200 on 8202"
+ok "psp-sim: ready on 8202"
+
+curl -fsS http://localhost:8106/health/ready > /dev/null || fail "payments: /health/ready did not answer 200 on 8106"
+ok "payments: ready on 8106 (database reachable)"
+
+# A card through the whole path: a traveller token tokenises a test card at Payments, Payments hands it to the
+# simulator, and the answer holds a token and the last four digits and nothing that could be charged. The expiry is
+# three years out so the check does not age.
+year=$(($(date -u +%Y) + 3))
+tokenised=$(curl -fsS -X POST "http://localhost:8106/payments/methods?api-version=2026-11-01" \
+  -H "Authorization: Bearer $(access_token traveller1)" -H 'Content-Type: application/json' \
+  -d "{\"number\":\"4242 4242 4242 4242\",\"expMonth\":12,\"expYear\":$year,\"cvc\":\"123\"}") \
+  || fail "payments: tokenising a test card with a Keycloak traveller token did not answer 201"
+grep -q '"last4":"4242"' <<< "$tokenised" || fail "payments: the tokenised card has no last four digits: ${tokenised:0:300}"
+grep -q '"token":"pm_' <<< "$tokenised" || fail "payments: the tokenised card has no pm_ token: ${tokenised:0:300}"
+! grep -q '4242424242424242\|4242 4242 4242 4242' <<< "$tokenised" || fail "payments: the answer to a tokenisation repeats the card number"
+ok "payments: a Keycloak traveller token tokenises a test card through the simulator; the answer holds the last four digits only"
+
 echo "stack ok"
