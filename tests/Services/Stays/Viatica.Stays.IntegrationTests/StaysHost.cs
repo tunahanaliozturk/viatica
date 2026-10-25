@@ -126,6 +126,12 @@ internal sealed class StaysHost : WebApplicationFactory<Program>
     {
         _client?.Dispose();
         base.Dispose(disposing);
+
+        // Each host has a database of its own, and so a pool of its own that nothing would otherwise close. Writers of
+        // one key now wait on each other's transactions (ADR 0007), which grows these pools; left open they add up past
+        // the server's 100 connections over the run. Cleared per pool, as Cars clears all of them.
+        using var connection = new NpgsqlConnection(_connectionString);
+        NpgsqlConnection.ClearPool(connection);
     }
 
     // ------------------------------------------------------------------------------------------------------------

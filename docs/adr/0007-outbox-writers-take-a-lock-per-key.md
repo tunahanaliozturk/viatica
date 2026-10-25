@@ -83,6 +83,10 @@ writers, 500 saves each after an equal warm-up pass, one event per save. Two run
 - Do not hold a transaction open across a slow call after queuing an event: every other writer of that key waits.
   The same was true of the row locks the aggregate update takes, so this adds no new rule for a handler that saves
   once at the end.
+- A writer waiting for a key's lock holds its database connection while it waits. Many concurrent writers of one hot key
+  therefore occupy that many pool slots, which the Stays integration suite showed: with the hosts' pools left open it ran
+  out of the test server's 100 connections, and its host now clears its pool on dispose, as Cars and the airline
+  simulator do.
 - A pooled context is safe: the interceptor remembers the transaction it opened per context instance and forgets it
   when the save ends, whether it succeeded, failed or was cancelled.
 - Contexts that never queue an event pay a `ChangeTracker.Entries<OutboxMessage>()` scan per save.
