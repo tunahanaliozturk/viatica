@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
   `ReleaseAsync` as default interface methods; `RepeatableResponse` gains an optional `Owner` (#45).
 - A repeatable request from a caller without a subject is refused with `401`; anonymous callers used to share one
   namespace of ids and could be served each other's stored responses (#51).
+- `AddViaticaAuth` refuses an http `Viatica:Auth:Authority` outside Development at start-up unless
+  `Viatica:Auth:AllowInsecureMetadata` is true, which `compose.yaml` sets; `RequireHttpsMetadata` no longer depends on
+  the authority's scheme (#46).
 
 ### Added
 

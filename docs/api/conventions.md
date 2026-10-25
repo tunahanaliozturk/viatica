@@ -407,6 +407,13 @@ endpoint specific go after it.
 A missing or short skiptoken key stops the host at start-up rather than failing the first paged request.
 (`ErrorEnvelopeTests.The_host_refuses_to_start_without_a_skiptoken_key`)
 
+`AddViaticaAuth` validates JWTs against Keycloak, which serves its signing keys from `Viatica:Auth:Authority`. Outside
+Development that must be an `https` address and metadata is fetched over https only; an http authority stops the host
+at start-up (`AuthenticationTests.An_http_authority_outside_development_is_refused_at_startup`). A stack that keeps
+Keycloak on a private http network, such as `compose.yaml`, says so with `Viatica:Auth:AllowInsecureMetadata=true`
+(`An_http_authority_needs_development_or_an_explicit_opt_in`). An https authority in Production always requires https
+metadata (`An_https_authority_in_production_requires_https_metadata`).
+
 ## Cost
 
 The skiptoken and filter work on each request is measured in `docs/benchmark-results/`.
