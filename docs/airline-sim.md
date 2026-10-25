@@ -241,6 +241,9 @@ ActivitySource and Meter with `airlinesim.injected_latency`, `airlinesim.faults`
 
 - Offer ids are not signed. A caller that edits the price inside one gets the price it wrote. The sim's callers are
   our own services and tests; sign them if that ever changes.
+  Unsigned is not unchecked: `OfferToken.Decode` validates the whole token (leg entries, a timestamp
+  `DateTimeOffset` can hold, passenger counts a booking allows, non-negative amounts in cents), and anything else is
+  `OFFER_NOT_FOUND`, not a 500 (`MalformedOfferTokenTests`).
 - A booked order past its ticketing time limit keeps its seats until someone voids it. Real airlines cancel such
   orders on their own; the Flights service voids on every failure path, so the sim does not.
 - Daylight saving is ignored and there are no connecting itineraries.

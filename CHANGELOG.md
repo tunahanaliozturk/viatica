@@ -25,6 +25,9 @@ All notable changes to this project are documented here. The format follows
   accepts, instead of emitting a `nextLink` that always answers `InvalidSkipToken` (#47).
 - `Money` rejects a currency code with a trailing newline, which the `^[A-Z]{3}$` check let through; the check is now
   a length and ASCII upper case test, as in the JSON converter (#52).
+- Airline simulator: an offer id with a null leg, a timestamp outside `DateTimeOffset`, impossible passenger counts or
+  negative or oversized amounts is answered `OFFER_NOT_FOUND` by re-price and order creation instead of a 500 or, for
+  counts and amounts, accepted (#48).
 
 ### Added
 
