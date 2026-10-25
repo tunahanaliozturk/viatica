@@ -46,6 +46,10 @@ after the first is visible. Within a key, sequence order is commit order, and th
 - Keys are locked in sorted order, so two transactions that write the same keys in opposite order cannot deadlock
   (`Transactions_writing_the_same_keys_in_opposite_order_do_not_deadlock`; without the sort Postgres reports
   `40P01 deadlock detected`).
+- The sort covers one save. A transaction that calls `SaveChanges` several times locks each save's keys as it goes,
+  so two such transactions that reach the same keys in a different order can still deadlock. Postgres then aborts
+  one of them with `40P01`: a consumer retries it like any other failure, an HTTP request answers 500. The rule is
+  therefore one save per transaction for outbox writes.
 - Advisory locks are per database, so services do not share a key space. Two keys whose 64 bit hashes collide only
   wait for each other needlessly.
 - EF Core takes interceptors from the context options, not from the application service provider. `AddOutboxRelay`
