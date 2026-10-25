@@ -87,6 +87,7 @@ internal sealed class Owners : IAsyncDisposable
 
     private readonly Dictionary<Guid, ItemPlan> plans = [];
     private readonly List<IIntegrationEvent> received = [];
+    private readonly List<IIntegrationEvent> said = [];
     private readonly List<IIntegrationEvent> deferred = [];
     private readonly HashSet<Type> paused = [];
     private readonly List<Func<Task>> late = [];
@@ -114,10 +115,10 @@ internal sealed class Owners : IAsyncDisposable
     public static async Task<Owners> StartAsync(
         PostgresFixture postgres, KafkaFixture kafka, BookingTopics topics, FakeTimeProvider clock, byte[] passengerKey)
     {
-        string stays = await postgres.CreateDatabaseAsync("standin_stays");
-        string cars = await postgres.CreateDatabaseAsync("standin_cars");
-        string flights = await postgres.CreateDatabaseAsync("standin_flights");
-        string payments = await postgres.CreateDatabaseAsync("standin_payments");
+        string stays = new Npgsql.NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("standin_stays")) { MaxPoolSize = 5 }.ConnectionString;
+        string cars = new Npgsql.NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("standin_cars")) { MaxPoolSize = 5 }.ConnectionString;
+        string flights = new Npgsql.NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("standin_flights")) { MaxPoolSize = 5 }.ConnectionString;
+        string payments = new Npgsql.NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("standin_payments")) { MaxPoolSize = 5 }.ConnectionString;
 
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -212,7 +213,36 @@ internal sealed class Owners : IAsyncDisposable
         }
     }
 
+    /// <summary>Stops holding anything back and answers what was held, so a test starts with every owner responsive.</summary>
+    public async Task ResumeAllAsync()
+    {
+        List<IIntegrationEvent> held;
+        lock (gate)
+        {
+            paused.Clear();
+            held = [.. deferred];
+            deferred.Clear();
+        }
+
+        foreach (IIntegrationEvent request in held)
+        {
+            await ReactAsync(request);
+        }
+    }
+
     // What the tests ask.
+
+    /// <summary>Every answer the owners have given, in the order they gave it.</summary>
+    public IReadOnlyList<IIntegrationEvent> Said
+    {
+        get
+        {
+            lock (gate)
+            {
+                return [.. said];
+            }
+        }
+    }
 
     public IReadOnlyList<IIntegrationEvent> Received
     {
@@ -346,6 +376,11 @@ internal sealed class Owners : IAsyncDisposable
 
     private async Task SendAsync(IIntegrationEvent message)
     {
+        lock (gate)
+        {
+            said.Add(message);
+        }
+
         string topic = EventCatalog.TopicByType[message.GetType()];
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         StandInDb db = topic switch

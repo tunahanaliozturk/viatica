@@ -9,13 +9,14 @@ namespace Viatica.Booking.IntegrationTests;
 /// BKG-2 and the happy path of BKG-3, against the real host and real topics: the order of the saga as the owners saw
 /// it, the operation resource, the progress stream, and what a repeated checkout does and does not do.
 /// </summary>
-public sealed class CheckoutTests(PostgresFixture postgres, KafkaFixture kafka) : IAsyncLifetime
+public sealed class CheckoutTests(WorldFixture fixture) : IClassFixture<WorldFixture>, IAsyncLifetime
 {
-    private BookingWorld world = null!;
+    private BookingWorld world => fixture.World;
 
-    public async ValueTask InitializeAsync() => world = await BookingWorld.StartAsync(postgres, kafka);
+    // Nothing paused by an earlier test is still holding answers back.
+    public async ValueTask InitializeAsync() => await world.Owners.ResumeAllAsync();
 
-    public async ValueTask DisposeAsync() => await world.DisposeAsync();
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     [Fact]
     public async Task A_trip_with_a_stay_a_car_and_a_flight_is_held_authorised_ticketed_committed_and_captured_in_that_order()

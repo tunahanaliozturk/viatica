@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Confluent.Kafka;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -51,7 +52,7 @@ internal sealed class BookingHost : WebApplicationFactory<Program>
 
     public static async Task<BookingHost> StartAsync(PostgresFixture postgres, FakeTimeProvider clock, BookingTopics topics, string bootstrap, byte[] passengerKey, byte[] storageKey)
     {
-        string connection = await postgres.CreateDatabaseAsync("booking");
+        string connection = new Npgsql.NpgsqlConnectionStringBuilder(await postgres.CreateDatabaseAsync("booking")) { MaxPoolSize = 20 }.ConnectionString;
 
         await using (var db = new BookingDbContext(new DbContextOptionsBuilder<BookingDbContext>().UseNpgsql(connection).Options))
         {
@@ -163,7 +164,7 @@ internal sealed class BookingWorld : IAsyncDisposable
 
         BookingHost host = await BookingHost.StartAsync(postgres, clock, topics, kafka.BootstrapServers, passengerKey, storageKey);
         Owners owners = await Owners.StartAsync(postgres, kafka, topics, clock, passengerKey);
-        return new BookingWorld(host, owners, kafka.Probe(topics.Booking), topics);
+        return new BookingWorld(host, owners, kafka.Probe(topics.Booking), topics) { Bootstrap = kafka.BootstrapServers };
     }
 
     private HttpClient Client => client ??= Host.CreateClient();
@@ -326,6 +327,51 @@ internal sealed class BookingWorld : IAsyncDisposable
         }
 
         return events;
+    }
+
+    /// <summary>
+    /// Puts a message on a topic again, byte for byte: the same envelope, the same event id. That is what a broker
+    /// redelivering a message looks like to a consumer, and what the inbox exists to make harmless.
+    /// </summary>
+    public async Task ReplayAsync(string topic, ProbedMessage message)
+    {
+        using IProducer<string, byte[]> producer = new ProducerBuilder<string, byte[]>(new ProducerConfig { BootstrapServers = Bootstrap }).Build();
+        await producer.ProduceAsync(topic, new Message<string, byte[]> { Key = message.Key, Value = message.Value });
+    }
+
+    public string Bootstrap { get; set; } = "";
+
+    /// <summary>How many events Booking's consumers have taken in, by event id. A duplicate with a new id counts too.</summary>
+    public Task<int> InboxCountAsync() =>
+        Host.InDbAsync(db => db.Set<Viatica.Kernel.Messaging.InboxMessage>().CountAsync());
+
+    /// <summary>
+    /// Waits until Booking has taken in everything the owners have said so far. It says one more thing on each owner's
+    /// topic, under the trip's key, that means nothing to Booking; the consumer of a topic reads a key's messages in
+    /// order, so once all four are in the inbox everything before them on those topics has been handled. It then waits
+    /// for the inbox to stop growing, for the messages on the other topics that were in flight meanwhile.
+    /// </summary>
+    public async Task SettledAsync(Guid tripId)
+    {
+        int before = await InboxCountAsync();
+        await Owners.SayAsync(new StayHoldExpired(Guid.NewGuid(), tripId, Guid.NewGuid()));
+        await Owners.SayAsync(new CarHoldExpired(Guid.NewGuid(), tripId, Guid.NewGuid()));
+        await Owners.SayAsync(new FlightOrderVoided(Guid.NewGuid(), tripId, Guid.NewGuid()));
+        await Owners.SayAsync(new PaymentVoided(Guid.NewGuid(), tripId));
+        await Eventually.MatchesAsync(InboxCountAsync, count => count >= before + 4);
+
+        int last = -1;
+        DateTimeOffset since = DateTimeOffset.UtcNow;
+        while (DateTimeOffset.UtcNow - since < TimeSpan.FromMilliseconds(600))
+        {
+            await Task.Delay(100);
+            int now = await InboxCountAsync();
+            if (now != last)
+            {
+                last = now;
+                since = DateTimeOffset.UtcNow;
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()
