@@ -168,3 +168,59 @@ Validation details (`error.details[].code`, under a top-level `InvalidRequest`; 
 | `QueryTooShort` | Autocomplete `q` under two characters | `AutocompleteTests.Short_text_unknown_kinds_and_unknown_parameters_are_refused` |
 | `QueryTooLong` | Autocomplete `q` over 60 characters | `RequestTests.Autocomplete_needs_two_characters_and_a_kind` |
 | `InvalidTypes` | Autocomplete `types` holds something other than `city`, `airport`, `property` | same |
+
+## Payments
+
+HTTP errors from `Viatica.Payments.Api`. Tokenising needs a traveller token and reading a payment needs an admin token;
+the shared `401` and `403` apply. No answer here ever repeats a card number, a security code or a token
+(`NoCardDataStoredOrLoggedTests`).
+
+| Status | Code | When | Test |
+|---|---|---|---|
+| 400 | `InvalidRequest` | The card is wrong. One detail per broken field, with the codes below. `target` is the request field | `TokenisationTests.A_bad_card_is_a_400_with_every_broken_field_and_without_the_values_in_the_answer` |
+| 400 | `PaymentMethodInvalid` | The checks passed and the provider will not take the card, such as a number that is not one of its test cards. `innererror.code` is the provider's code (`incorrect_number`) | `TokenisationTests.A_card_that_passes_our_checks_but_is_not_a_test_card_is_refused_by_the_provider_as_PaymentMethodInvalid` |
+| 404 | `PaymentNotFound` | `GET /payments/{paymentId}`: no such payment | `OperationTests.An_unknown_payment_is_a_404_PaymentNotFound_and_only_an_admin_may_look` |
+| 503 | `ProviderUnavailable` | Tokenising while the provider cannot be asked. The card is not at fault; try again. `Retry-After: 5` | `TokenisationTests.When_the_provider_is_down_the_answer_is_a_503_that_says_to_try_again_and_no_token_is_made` |
+
+Validation details (`error.details[].code`, `target` is the request field):
+
+| Code | Target | Rule | Test |
+|---|---|---|---|
+| `InvalidCardNumber` | `number` | 12 to 19 digits, spaces and hyphens allowed, and the Luhn check | `CardTests.A_number_that_is_not_a_card_number_is_refused` |
+| `InvalidExpiry` | `expMonth`, `expYear` | Month 1 to 12; year from 2000 to 20 years ahead | `CardTests.Every_problem_is_reported_at_once` |
+| `CardExpired` | `expYear` | The card is good through the last day of its expiry month | `CardTests.A_card_that_expired_last_month_is_expired_and_one_that_expires_this_month_is_not`, `TokenisationTests.An_expired_card_is_refused_with_its_own_code` |
+| `InvalidCvc` | `cvc` | Three or four digits, when given | `CardTests.A_security_code_is_three_or_four_digits` |
+
+### Reasons on `PaymentDeclined`
+
+An authorisation is answered on `payments.v1`, so a refusal is an event and not an HTTP error. `PaymentDeclined.Reason` is
+one of:
+
+| Reason | Meaning | Test |
+|---|---|---|
+| a provider decline code, such as `generic_decline`, `insufficient_funds` | The provider declined the card. The decline code is used when there is one, the error code when there is not | `OperationTests.A_declining_card_is_answered_with_PaymentDeclined_and_the_provider_code_and_nothing_can_follow` |
+| `PaymentMethodInvalid` | The token is not one this service issued. The provider was not asked | `OperationTests.A_token_this_service_never_issued_is_a_decline_and_the_provider_is_not_asked` |
+| `InvalidAmount` | The amount is zero or negative, or the currency is not three capital letters | `OperationTests.An_amount_that_is_not_money_is_a_decline_and_the_provider_is_not_asked`, `MoneyConversionTests` |
+| `PaymentAlreadyExistsForTrip` | The trip already has a payment under another payment id | `OperationTests.One_trip_has_one_payment_a_second_payment_id_is_declined_and_the_first_is_untouched` |
+| `ProviderUnavailable` | The provider could not be reached and nothing was sent: the circuit was open, or it said it was down. Nothing is held | `CircuitBreakerTests.With_the_circuit_open_an_authorisation_is_declined_at_once_without_a_call_and_a_capture_waits_and_happens_once` |
+
+### Reasons on `PaymentOperationRefused`
+
+A capture, void or refund that was not carried out. `Operation` says which, `OperationId` is the payment id for a capture
+and a void and the refund id for a refund. A money rule refused it before the provider was asked, or the provider
+refused it. Nothing moved.
+
+| Reason | Meaning | Test |
+|---|---|---|
+| `PaymentNotFound` | No payment with that id on that trip | `OperationTests.Requests_about_a_payment_this_service_has_no_record_of_are_refused_not_lost` |
+| `ExceedsAuthorization` | A capture above the authorised amount | `OperationTests.A_capture_above_the_authorisation_is_refused_by_us_and_never_reaches_the_provider` |
+| `AlreadyCaptured` | A second capture, or a void of a captured payment (refund it instead) | `OperationTests.A_captured_payment_cannot_be_voided_and_the_provider_is_not_asked` |
+| `PaymentVoided` | A capture or a void after a void | `OperationTests.A_void_releases_the_hold_and_a_capture_after_it_is_refused` |
+| `NotAuthorized` | The payment was declined, so there is nothing to capture or void | `OperationTests.A_declining_card_is_answered_with_PaymentDeclined_and_the_provider_code_and_nothing_can_follow` |
+| `NotCaptured` | A refund before a capture or after a void | `OperationTests.A_refund_before_any_capture_is_refused` |
+| `ExceedsCapture` | Refunds would add up to more than was captured | `OperationTests.Refunds_in_parts_add_up_to_the_capture_and_one_more_cent_is_refused_without_a_provider_call` |
+| `InvalidAmount`, `CurrencyMismatch` | The amount is not positive or not money, or is in another currency than the payment | `PaymentRulesTests.An_amount_that_is_not_positive_is_refused`, `PaymentRulesTests.Money_in_another_currency_is_refused_not_added_to_euros` |
+| a provider error code, such as `payment_intent_unexpected_state` | The provider refused what our rules allowed | `PspGatewayTests.A_request_the_provider_rejects_is_a_refusal` |
+
+`PaymentOperationRefused` is new in `Viatica.Contracts` with this service; the design had an answer for a declined
+authorisation and none for these three operations.

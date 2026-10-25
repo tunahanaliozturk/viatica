@@ -72,3 +72,14 @@ All notable changes to this project are documented here. The format follows
   `docs/benchmark-results/search-query.md`, `http/search.http`). Also adds `search` and `search-migrate` to compose,
   `Viatica.Testing.OpenSearchFixture`, `Paging.BindPageRequest` and `IntegrationEventTypes.Read` in the Kernel, and
   `action.auto_create_index` on the OpenSearch node so a write to a missing alias fails instead of creating an index.
+- Payments service (`src/Services/Payments`, port 8106) and `psp-sim` (`src/Simulators/Viatica.PspSim`, port 8202).
+  Payments tokenises a test card over HTTP (the number goes to the provider and nowhere else; a test searches every
+  log entry, every text column and every event of a full run for it), and authorises, captures, voids and refunds
+  from `booking.v1`, each idempotent on trip id plus operation id, with the money rules in one `Payment` aggregate.
+  A provider timeout is settled by asking the provider for the operation by idempotency key, never by a blind
+  retry; if that cannot be answered, nothing is decided and the request is tried again. `psp-sim` is a Stripe shaped
+  provider with test cards (one times out and still takes the money, one times out and does not), idempotency keys
+  on every mutating call, a lookup by key, and latency and failure knobs. `PaymentOperationRefused` is new in
+  `Viatica.Contracts`. See `docs/services/payments.md`, `docs/psp-sim.md`, `http/payments.http`.
+- `psp-sim`, `payments-migrate` and `payments` in `compose.yaml`, a Payments probe in `deploy/check-stack.sh` and a
+  provider outage runbook in `docs/operations.md`.

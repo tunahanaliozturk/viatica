@@ -1,0 +1,124 @@
+# Payments and the payment provider simulator, in the order a reader would try them. Start the stack
+# (docker compose up -d --wait) and open this file in VS Code with the REST Client extension, or in a JetBrains IDE.
+# Every Payments request carries api-version; the simulator's calls do not, because it is somebody else's API.
+#
+# Payments has one HTTP door for travellers, tokenising a card, and one for operators, reading a payment. Authorising,
+# capturing, voiding and refunding are requests Booking puts on Kafka, so they have no request here. To watch one happen
+# without Booking, put the event on booking.v1 by hand and read payments.v1; docs/services/payments.md draws the flow.
+#
+# The people are in the Keycloak realm: traveller1 and admin1. Their password is "viatica".
+
+@payments = http://localhost:8106
+@psp = http://localhost:8202
+@keycloak = http://localhost:8080/realms/viatica/protocol/openid-connect/token
+@v = api-version=2026-11-01
+
+### 1. Is it ready? Needs no api-version. Ready means Postgres answers; the provider is not part of readiness.
+GET {{payments}}/health/ready
+
+### 2. Sign in as a traveller. Later requests read the token from here.
+# @name travellerLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=traveller1&password=viatica
+
+@travellerToken = {{travellerLogin.response.body.access_token}}
+
+### 3. Tokenise a test card (PAY-1). The number goes to the simulator and nowhere else.
+# The answer is a token, the brand and the last four digits. The token is what Booking carries in
+# PaymentAuthorizationRequested. Spaces and hyphens in the number are fine. Change the expiry to a month ahead.
+# @name tokenise
+POST {{payments}}/payments/methods?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "number": "4242 4242 4242 4242", "expMonth": 12, "expYear": 2030, "cvc": "123" }
+
+@methodToken = {{tokenise.response.body.token}}
+
+### 4. A card that will be declined later. It tokenises fine: the card decides the outcome when it is charged.
+# 4000000000009995 is insufficient funds, 4000000000000002 a plain decline.
+POST {{payments}}/payments/methods?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "number": "4000000000009995", "expMonth": 12, "expYear": 2030, "cvc": "123" }
+
+### 5. The two timeout cards. 4000009990000013 does the work and then loses the answer; 4000009990000021 hangs and does
+# nothing. A payment on either one ends in the right single outcome, because Payments asks the simulator what it
+# recorded under the operation's idempotency key before it decides (request 12 shows the key).
+POST {{payments}}/payments/methods?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "number": "4000009990000013", "expMonth": 12, "expYear": 2030, "cvc": "123" }
+
+### 6. What a mistake looks like: a number that fails the Luhn check, a month of 13 and a short security code, all listed at once.
+# The answer says which fields and why, and never repeats a value.
+POST {{payments}}/payments/methods?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "number": "4242424242424241", "expMonth": 13, "expYear": 2030, "cvc": "12" }
+
+### 7. A number that is valid and is not a test card. The simulator refuses it, as Stripe's test mode refuses a real card.
+# 400 PaymentMethodInvalid, with the simulator's code in innererror.
+POST {{payments}}/payments/methods?{{v}}
+Authorization: Bearer {{travellerToken}}
+Content-Type: application/json
+
+{ "number": "4111111111111111", "expMonth": 12, "expYear": 2030, "cvc": "123" }
+
+### 8. Sign in as an admin, to read a payment.
+# @name adminLogin
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=viatica-cli&username=admin1&password=viatica
+
+@adminToken = {{adminLogin.response.body.access_token}}
+
+### 9. Read a payment: its authorised, captured and refunded money, and every concluded operation with how it ended.
+# Replace the id with a payment id from a PaymentAuthorized event. 404 PaymentNotFound otherwise. No card data.
+GET {{payments}}/payments/0192f0c4-7a3b-7cde-8f00-4f7c2b1d9e01?{{v}}
+Authorization: Bearer {{adminToken}}
+
+### The simulator ------------------------------------------------------------------------------------------------
+
+### 10. The test cards, and what each does.
+GET {{psp}}/admin/cards
+
+### 11. The live knobs and their defaults.
+GET {{psp}}/admin/knobs
+
+### 12. Ask the simulator what it recorded under an idempotency key (PAY-3). This is the call Payments makes after a timeout.
+# The key of an operation is {tripId:N}:{kind}:{operationId:N}, for example
+# 0192f0c47a3b7cde8f004f7c2b1d9e01:capture:0192f0c47a3b7cde8f004f7c2b1d9e02.
+# 404 resource_missing means the call never reached the provider, or it hung without working.
+GET {{psp}}/v1/operations?idempotency_key=0192f0c47a3b7cde8f004f7c2b1d9e01:capture:0192f0c47a3b7cde8f004f7c2b1d9e02
+
+### 13. Every authorisation the simulator holds, with the trip it was made for in its metadata.
+GET {{psp}}/v1/payment_intents
+
+### 14. Make the provider slow for a while: every call takes about two seconds. Payments gives it five.
+PATCH {{psp}}/admin/knobs
+Content-Type: application/json
+
+{ "LatencyMedianMs": 2000, "LatencySigma": 0.3 }
+
+### 15. Make every call do its work and lose the answer, and take the lookup down too. Payments can then decide
+# nothing, and keeps trying. Put the knobs back with request 17 and it concludes by itself, once.
+PATCH {{psp}}/admin/knobs
+Content-Type: application/json
+
+{ "TimeoutRate": 1.0, "PerformedRate": 1.0, "LookupOutage": true }
+
+### 16. A provider outage: every call answers 503 at once.
+PATCH {{psp}}/admin/knobs
+Content-Type: application/json
+
+{ "Outage": true }
+
+### 17. Put every knob back.
+POST {{psp}}/admin/knobs/reset
