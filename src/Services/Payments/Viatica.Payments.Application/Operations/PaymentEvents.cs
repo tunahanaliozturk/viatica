@@ -1,3 +1,4 @@
+using Moongazing.OrionGuard.Exceptions;
 using Viatica.Contracts;
 using Viatica.Kernel;
 using Viatica.Payments.Domain;
@@ -33,8 +34,10 @@ internal static class PaymentEvents
         {
             return new Money(price.Amount, price.Currency);
         }
-        catch (ArgumentException)
+        catch (Exception exception) when (exception is ArgumentException or GuardException)
         {
+            // Money refuses a currency that is not three capital letters with OrionGuard's exception and one with
+            // too many decimals with an ArgumentException. A price from the wire is untrusted either way.
             return null;
         }
     }

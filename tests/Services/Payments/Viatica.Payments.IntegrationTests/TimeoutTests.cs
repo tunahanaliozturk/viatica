@@ -25,6 +25,17 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
 
     private int Lookups(string key) => OnWire(key).Count(static e => e.Method == HttpMethod.Get);
 
+    // Between two copies of a call there is a lookup. Two calls in a row would be a blind retry, even if it worked out.
+    private void NoCallIsRepeatedBeforeItsDoubtIsSettled(string key)
+    {
+        string[] methods = [.. OnWire(key).Select(static e => e.Method.Method)];
+        methods.ShouldNotBeEmpty();
+        for (int i = 1; i < methods.Length; i++)
+        {
+            (methods[i - 1] == "POST" && methods[i] == "POST").ShouldBeFalse($"two calls in a row on the wire: {string.Join(", ", methods)}");
+        }
+    }
+
     private async Task<OperationRecord> RecordOf(Guid tripId, OperationKind kind) =>
         (await scenario.OperationsAsync(tripId)).Single(o => o.Kind == kind);
 
@@ -43,6 +54,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(request);
         await scenario.NextAsync(nameof(PaymentAuthorized), request.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(request.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         events.Select(static m => m.Type).ShouldBe([nameof(PaymentAuthorized)]);
         Posts(key).ShouldBe(1, "the call that happened was not made again");
@@ -61,6 +73,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(new PaymentCaptureRequested(payment.TripId, payment.PaymentId, Scenario.Eur(80m)));
         await scenario.NextAsync(nameof(PaymentCaptured), payment.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         Scenario.OfType(events, nameof(PaymentCaptured)).Count.ShouldBe(1);
         events.Count(static m => m.Type == nameof(PaymentOperationRefused)).ShouldBe(0);
@@ -80,6 +93,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(new PaymentVoidRequested(payment.TripId, payment.PaymentId));
         await scenario.NextAsync(nameof(PaymentVoided), payment.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         Scenario.OfType(events, nameof(PaymentVoided)).Count.ShouldBe(1);
         Posts(key).ShouldBe(1);
@@ -101,6 +115,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(new PaymentRefundRequested(payment.TripId, payment.PaymentId, refund, Scenario.Eur(35m)));
         await scenario.NextForOperationAsync(nameof(PaymentRefunded), payment.TripId, refund, "refundId");
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         Scenario.OfType(events, nameof(PaymentRefunded)).Count.ShouldBe(1);
         Posts(key).ShouldBe(1);
@@ -118,6 +133,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(request);
         await scenario.NextAsync(nameof(PaymentAuthorized), request.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(request.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         events.Select(static m => m.Type).ShouldBe([nameof(PaymentAuthorized)]);
         // POST (timed out, did nothing), GET (nothing recorded), POST (same key, does the work): in that order.
@@ -136,6 +152,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await scenario.SendAsync(new PaymentCaptureRequested(payment.TripId, payment.PaymentId, Scenario.Eur(100m)));
         await scenario.NextAsync(nameof(PaymentCaptured), payment.TripId);
         IReadOnlyList<ProbedMessage> events = await scenario.EventsOfAsync(payment.TripId);
+        scenario.HandlerFailures().Count.ShouldBe(0, "a timeout that is settled by the lookup is not a failure to retry");
 
         Scenario.OfType(events, nameof(PaymentCaptured)).Count.ShouldBe(1);
         OnWire(key).Select(static e => e.Method.Method).ShouldBe(["POST", "GET", "POST"]);
@@ -156,6 +173,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
 
         // While the doubt stands, nothing is decided: no event, no record, no state change. The consumer keeps trying.
         await scenario.NothingPublishedAsync(payment.TripId, TimeSpan.FromSeconds(2), nameof(PaymentAuthorized));
+        NoCallIsRepeatedBeforeItsDoubtIsSettled(key);
         (await scenario.OperationsAsync(payment.TripId)).ShouldNotContain(static o => o.Kind == OperationKind.Capture);
         (await scenario.PaymentAsync(payment.PaymentId)).Status.ShouldBe(PaymentStatus.Authorized);
         payments.Host.Logs.Entries.Count(static e => e.Contains("could not be resolved", StringComparison.Ordinal)).ShouldBeGreaterThanOrEqualTo(2);
@@ -183,6 +201,7 @@ public sealed class TimeoutTests(DefaultPayments payments) : IClassFixture<Defau
         await Eventually.MatchesAsync(() => Task.FromResult(Lookups(key)), lookups => lookups >= 3, TimeSpan.FromSeconds(30));
 
         await scenario.NothingPublishedAsync(payment.TripId, TimeSpan.FromSeconds(2), nameof(PaymentAuthorized));
+        NoCallIsRepeatedBeforeItsDoubtIsSettled(key);
         (await IntentOf(payment.TripId)).GetProperty("amount_received").GetInt64().ShouldBe(0);
 
         await payments.Sim.SetKnobsAsync(new { TimeoutRate = 0.0, LookupOutage = false });

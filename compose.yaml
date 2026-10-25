@@ -38,6 +38,19 @@ x-flights-environment: &flights-environment
   Flights__Suppliers__Airlines__3__BaseUrl: http://airline-sim:8080/ndc/ZJ/
   OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
 
+# Settings the Payments host and its migrate one-shot share. The migrate step builds the same host, so it needs the same
+# connection strings even though it only touches the database. Payments has no key of its own: a card number never
+# reaches a store, so there is nothing to seal. The skiptoken key is a public development value.
+x-payments-environment: &payments-environment
+  ConnectionStrings__Payments: Host=postgres;Port=5432;Database=payments;Username=payments;Password=payments
+  Kafka__BootstrapServers: kafka:9092
+  Viatica__Api__SupportedApiVersions__0: "2026-11-01"
+  Viatica__Api__SkipTokenKey: dmlhdGljYS1kZXYtc2tpcHRva2VuLWtleS0wMDAwMDA=
+  Viatica__Auth__Authority: http://keycloak:8080/realms/viatica
+  Viatica__Auth__ValidIssuer: http://localhost:8080/realms/viatica
+  Payments__Provider__BaseUrl: http://psp-sim:8080/
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+
 services:
   postgres:
     image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.6-alpine
@@ -283,6 +296,28 @@ services:
       start_period: 10s
       start_interval: 2s
 
+  # --- payment provider simulator (a test double, not part of the product) ---------------------------------------------
+
+  # Stripe shaped, and entirely in memory: no database, no schema step. docs/psp-sim.md has the API, the test cards and
+  # the switches.
+  psp-sim:
+    build:
+      context: .
+      dockerfile: src/Simulators/Viatica.PspSim/Dockerfile
+    image: viatica/psp-sim:dev
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+    # Its admin API is unauthenticated on purpose. Bound to localhost like everything else here; never expose it.
+    ports: ["8202:8080"]
+    healthcheck:
+      # The aspnet image has bash but no curl or wget, so bash speaks HTTP to its own port.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+      start_interval: 2s
+
   # --- Flights (M3) ------------------------------------------------------------------------------------------------
 
   flights-migrate:
@@ -402,6 +437,37 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # --- Payments (port 8106) ---------------------------------------------------------------------------------------
+
+  payments-migrate:
+    build:
+      context: .
+      dockerfile: src/Services/Payments/Viatica.Payments.Api/Dockerfile
+    image: viatica/payments:dev
+    command: ["migrate"]
+    environment: *payments-environment
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  payments:
+    image: viatica/payments:dev
+    environment: *payments-environment
+    ports: ["8106:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      payments-migrate: { condition: service_completed_successfully }
+      psp-sim: { condition: service_healthy }
+    healthcheck:
+      # The service asks its own port; the runtime image has no curl or wget (see Program.cs, "healthcheck").
+      test: ["CMD", "dotnet", "Viatica.Payments.Api.dll", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+      start_interval: 2s
 
 volumes:
   postgres:

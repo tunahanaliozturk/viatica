@@ -35,6 +35,10 @@ internal sealed class Scenario(PaymentsFixture payments)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(45);
 
+    // The host lives for the whole class and its log only grows. A scenario is made once per test, so what it counts as a
+    // failure is what happened after it was made.
+    private readonly int handlerFailuresBefore = CountHandlerFailures(payments.Host.Logs);
+
     public PaymentsHost Host => payments.Host;
 
     public SimHost Sim => payments.Sim;
@@ -112,6 +116,18 @@ internal sealed class Scenario(PaymentsFixture payments)
     public async Task NothingPublishedAsync(Guid tripId, TimeSpan window, params string[] except) =>
         await Should.ThrowAsync<TimeoutException>(() =>
             payments.Probe.WaitForAsync(m => m.DataString("tripId") == tripId.ToString() && !except.Contains(m.Type), window));
+
+    /// <summary>
+    /// The consumer logs every attempt of a handler that threw. A request that is a harmless repeat must not be one of
+    /// them: a handler that throws on a duplicate is retried, parked on the dead letter topic, and holds its partition
+    /// meanwhile, and the outcome events alone would never show it.
+    /// </summary>
+    public IReadOnlyList<string> HandlerFailures() => [.. HandlerFailureEntries(payments.Host.Logs).Skip(handlerFailuresBefore)];
+
+    private static int CountHandlerFailures(CapturedLogs logs) => HandlerFailureEntries(logs).Count();
+
+    private static IEnumerable<string> HandlerFailureEntries(CapturedLogs logs) =>
+        logs.Entries.Where(static e => e.Contains("Handler for ", StringComparison.Ordinal) && e.Contains("failed on attempt", StringComparison.Ordinal));
 
     public static IReadOnlyList<ProbedMessage> OfType(IEnumerable<ProbedMessage> events, string type) =>
         [.. events.Where(m => m.Type == type)];

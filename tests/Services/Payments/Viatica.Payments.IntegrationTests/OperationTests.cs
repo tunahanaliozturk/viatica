@@ -201,6 +201,23 @@ public sealed class OperationTests(DefaultPayments payments) : IClassFixture<Def
         payments.Host.Wire.Count(HttpMethod.Post, "/v1/payment_intents").ShouldBe(authorisationsBefore);
     }
 
+    [Theory]
+    [InlineData(0, "EUR")]
+    [InlineData(-5, "EUR")]
+    [InlineData(10, "euro")]
+    public async Task An_amount_that_is_not_money_is_a_decline_and_the_provider_is_not_asked(int amount, string currency)
+    {
+        string token = await scenario.TokenAsync();
+        int authorisationsBefore = payments.Host.Wire.Count(HttpMethod.Post, "/v1/payment_intents");
+        var request = new PaymentAuthorizationRequested(Guid.CreateVersion7(), Guid.CreateVersion7(), new Price(amount, currency), token);
+
+        await scenario.SendAsync(request);
+        ProbedMessage declined = await scenario.NextAsync(nameof(PaymentDeclined), request.TripId);
+
+        declined.DataString("reason").ShouldBe("InvalidAmount");
+        payments.Host.Wire.Count(HttpMethod.Post, "/v1/payment_intents").ShouldBe(authorisationsBefore);
+    }
+
     [Fact]
     public async Task Requests_about_a_payment_this_service_has_no_record_of_are_refused_not_lost()
     {
