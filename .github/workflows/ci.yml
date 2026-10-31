@@ -20,10 +20,10 @@ jobs:
     name: build, format, licences, architecture, unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # global.json pins the .NET 11 SDK; setup-dotnet installs exactly that one, prerelease included.
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -60,7 +60,7 @@ jobs:
     name: compose stack
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The local stack exactly as docs/operations.md starts it. --wait returns only once every health check
       # passes, and fails the step if one never does.
@@ -80,9 +80,9 @@ jobs:
     name: integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
