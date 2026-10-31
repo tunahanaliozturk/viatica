@@ -55,7 +55,7 @@ x-payments-environment: &payments-environment
 
 services:
   postgres:
-    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.6-alpine
+    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5 # 18.6-alpine
     environment:
       POSTGRES_PASSWORD: postgres
     # 5450 rather than 5432: a native Postgres on the host would otherwise take the port first.
@@ -124,7 +124,7 @@ services:
     restart: "no"
 
   opensearch:
-    image: opensearchproject/opensearch:3.9.0@sha256:adfa61f85025d06b4aeb562e7e74fde7e31c437039c93c3862c17e9acebd6c7c # 3.9.0
+    image: opensearchproject/opensearch:3.9.0@sha256:3b55f6b6249cfdb92b52ee59adc8a266203ba9ef9f5d82544fad6f1af2f3609e # 3.9.0
     environment:
       discovery.type: single-node
       # 1 GB heap, the cap docs/requirements.md sets for this machine.
@@ -151,7 +151,7 @@ services:
 
   # Optional, because it costs another few hundred MB: docker compose --profile dashboards up -d --wait
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:3.9.0@sha256:4bdb8ded547ce7f4c379a10261f1b4aad58726900c215be570a7d1fe86f2a7d8 # 3.9.0
+    image: opensearchproject/opensearch-dashboards:3.9.0@sha256:256d4cea5928868ac09bca642a0ac8285a2b7e4b7fdd45c4ec06e75a5cf3184c # 3.9.0
     profiles: ["dashboards"]
     depends_on:
       opensearch: { condition: service_healthy }
@@ -213,7 +213,7 @@ services:
       start_interval: 2s
 
   valkey:
-    image: valkey/valkey:8.1.10-alpine@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507 # 8.1.10-alpine
+    image: valkey/valkey:9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b # 8.1.10-alpine
     # A cache (flight offers) and rate limit counters, both rebuilt from nothing after a restart, so nothing is
     # written to disk.
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
@@ -251,7 +251,7 @@ services:
       start_interval: 3s
 
   dashboard:
-    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1@sha256:03099004e132a7ca2feb66c5fa24715ffeaaf2fffab6f8b2cda23de3abd3ea45 # 13.6.1
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.2@sha256:e4220c55fa3c3e40ad2d733ef07973392299b420e9bde6924e8f6a1e71ff01a8 # 13.6.1
     # No health check, and not for want of trying: the image is distroless and holds the dashboard binary and
     # nothing else, no shell, no curl, nothing a check could run. deploy/check-stack.sh sends it an OTLP export
     # from outside instead. Services must not wait on it either; an OpenTelemetry exporter drops data when the
